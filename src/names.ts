@@ -72,12 +72,23 @@ export function findNamed<T extends Named>(words: string, named: readonly T[]): 
   return { matches: meant.map(entry => entry.item), rest, at: meant.length ? meant[0].run.start : null }
 }
 
-const VERBS: Record<string, Command> = { message: 'message', tell: 'message', text: 'message', open: 'open', show: 'open' }
+const VERBS = new Map<string, Command>([
+  ['message', 'message'],
+  ['tell', 'message'],
+  ['text', 'message'],
+  ['open', 'open'],
+  ['show', 'open'],
+])
+
+export function addressed<T extends Named>(words: string, named: readonly T[]): Found<T> {
+  const said = tokensOf(words).map(token => token.text)
+  const verbAt = said.findIndex(word => VERBS.has(word))
+  const found = findNamed(words, named)
+  const nameAt = verbAt + (VERBS.get(said[verbAt]) === 'message' && said[verbAt + 1] === 'to' ? 2 : 1)
+  return verbAt >= 0 && found.at === nameAt ? found : { matches: [], rest: '', at: null }
+}
 
 export function commandOf(words: string, named: readonly Named[]): Command | null {
-  const said = tokensOf(words).map(token => token.text)
-  const command = VERBS[said[0] ?? '']
-  if (!command) return null
-  const nameAt = command === 'message' && said[1] === 'to' ? 2 : 1
-  return findNamed(words, named).at === nameAt ? command : null
+  const first = tokensOf(words)[0]?.text ?? ''
+  return addressed(words, named).matches.length ? (VERBS.get(first) ?? null) : null
 }

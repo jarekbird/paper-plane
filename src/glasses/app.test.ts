@@ -556,4 +556,32 @@ describe('by voice, from any screen', () => {
     await settle()
     expect([await unread('anna'), await unread('launch')]).toEqual([0, 0])
   })
+
+  it('asks which chat when the one named after "message" is not picked, whatever names follow', async () => {
+    const { fake, say, router, sent } = await world(['anna', 'sam'], ['message Robert ask Sam about lunch'])
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(sent()).toEqual([])
+  })
+
+  it('A4: says nothing on glasses that are gone when the app ends while chats are being marked read', async () => {
+    const w = await world(['anna', 'launch'])
+    let fail = (_: Error) => {}
+    w.messenger.read = () => new Promise<void>((_, reject) => (fail = reject))
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.fake.pick('Mark all read')
+    await settle()
+    w.life.end()
+    fail(new Error('offline'))
+    await settle()
+    expect(noticed).not.toHaveBeenCalled()
+  })
+
+  it('opens the chat, with no reply started, when only a full stop follows the name', async () => {
+    const { say, router } = await world(['anna', 'sam'], ['Message Sam.'])
+    await say()
+    expect(router.current.id).toBe('chat:sam')
+  })
 })

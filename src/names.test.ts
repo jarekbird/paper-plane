@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { commandOf, findNamed } from './names.ts'
+import { addressed, commandOf, findNamed } from './names.ts'
 
 const chats = [
   { id: 'anna', title: 'Anna Lee' },
@@ -88,5 +88,19 @@ describe('a command that names its chat, read on the phone', () => {
     for (const words of ['message someone', 'tell me a joke', 'open the door for Sam', 'I will message Sam later', 'go back', 'Sam']) {
       expect(commandOf(words, chats)).toBeNull()
     }
+  })
+
+  it('takes a chat as the one meant only when its name comes right after the command word', () => {
+    expect(addressed('message Robert ask Sam about lunch', chats).matches).toEqual([])
+    expect(addressed('I need to message Robert about Sam', chats).matches).toEqual([])
+    expect(addressed('open the door for Sam', chats).matches).toEqual([])
+    expect(addressed('Sam', chats).matches).toEqual([])
+    expect(addressed('please message Sam see you there', chats)).toMatchObject({ matches: [chats[3]], rest: 'see you there' })
+    expect(addressed('tell launch crew go home', chats)).toMatchObject({ matches: [chats[2]], rest: 'go home' })
+  })
+
+  it('does not take an ordinary word for a command word', () => {
+    expect(commandOf('constructor Sam', chats)).toBeNull()
+    expect(addressed('constructor Sam', chats).matches).toEqual([])
   })
 })

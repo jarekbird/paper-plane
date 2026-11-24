@@ -25,7 +25,7 @@ import {
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
-import { commandOf, findNamed } from '../names.ts'
+import { addressed, commandOf, findNamed } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
 
@@ -76,7 +76,10 @@ const WORDS = {
   start: 'That is the start',
 }
 
-const showable = (words: string) => cleanText(words).trim()
+const showable = (words: string) => {
+  const shown = cleanText(words).trim()
+  return /[\p{L}\p{N}]/u.test(shown) ? shown : ''
+}
 
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
 
@@ -313,7 +316,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const named = () => {
     const heard = said
     said = null
-    return heard ? findNamed(heard.words, inbox.picked()) : { matches: [], rest: '', at: null }
+    return heard ? addressed(heard.words, inbox.picked()) : { matches: [], rest: '', at: null }
   }
 
   const pick = (among: readonly Chat[]) => {
@@ -381,7 +384,10 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       const ids = unread()
       return [{ id: ids.join(' '), say: WORDS.listedChats, value: ids }]
     },
-    choose: () => void markRead(unread()).then(redraw, () => shell.notice(WORDS.notRead)),
+    choose: () =>
+      void markRead(unread()).then(redraw, error => {
+        if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notRead)
+      }),
     run: markRead,
   })
 
