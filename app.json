@@ -1,0 +1,15 @@
+{
+  "package_id": "com.jarekbird.paperplane",
+  "edition": "202601",
+  "name": "Paper Plane",
+  "version": "0.1.0",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "g2-microphone",
+      "desc": "Hold the touchpad to talk: to say a reply, or to go somewhere in the app by voice."
+    }
+  ],
+  "supported_languages": ["en"]
+}

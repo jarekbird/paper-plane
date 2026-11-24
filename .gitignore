@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+*.ehpk
+.DS_Store
+.env
+.env.*
+*.local
+.sim

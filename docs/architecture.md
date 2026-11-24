@@ -1,0 +1,111 @@
+# Architecture
+
+## Overview
+
+Kept by hand. A change that adds or moves a module, a connection or a data flow updates this picture first, in its
+design (skill `develop`). Arrows point from caller to callee. The picture is the rules of `CLAUDE.md`; a box with no
+node in the module map below is not built yet.
+
+```mermaid
+flowchart TB
+  subgraph app["App, in the Even app on the phone · src/"]
+    main["src/main.ts<br>waits for the bridge, hands it on"]
+    page["Phone page<br>src/phone"]
+    glasses["Glasses screens<br>src/glasses"]
+    messenger["Interfaces<br>src/messenger.ts"]
+    subgraph services["Services, no UI"]
+      telegram["src/telegram"]
+      google["src/google"]
+      voice["src/voice"]
+      demo["src/demo<br>sample account, no network"]
+    end
+    store["src/store.ts"]
+    earshot["Earshot<br>Router and Shell: screens, touch, hold, menu<br>Glasses: draws, reads input, records<br>Lifetime, the store's places"]
+    bridge["Even SDK bridge"]
+  end
+  device["G2 glasses"]
+  tg["Telegram's servers"]
+  gapi["Google's APIs"]
+  subgraph ours["Developer's Cloudflare account"]
+    worker["Worker · worker/<br>voice, drafts, Google sign-in"]
+  end
+  openrouter["OpenRouter"]
+
+  main --> glasses
+  main --> page
+  main --> services
+  main --> store
+  glasses -- "A2" --> messenger
+  page -- "A2" --> messenger
+  services -. "implement" .-> messenger
+  glasses -- "screens: a view and actions each (A7)" --> earshot
+  earshot -- "draw, input, microphone (A3)" --> bridge
+  store -- "storage (A3)" --> bridge
+  bridge <--> device
+  telegram -- "session, chats, messages (S1)" --> tg
+  google -- "calendar, mail" --> gapi
+  google -- "sign-in, picked up once (S7)" --> worker
+  voice -- "the sound of a hold; the picked chats' titles with the words heard; one chat's recent messages for a draft (S1)" --> worker
+  worker --> openrouter
+  worker -- "sign-in" --> gapi
+```
+
+Three things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
+live only on the Worker (S3), which stores nothing but a Google sign-in on its way to the phone (S7).
+
+Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
+`Shell` reads the touchpad, runs the action a tap, a swipe, the menu or the voice chose, and its `Glasses` alone
+talks to the Even SDK bridge. Timers, listeners, sockets and requests belong to an Earshot `Lifetime` (A4), and code
+that owns one awaits through it (A5).
+
+## Module map
+
+Generated from the imports ESLint sees, with the boundaries `eslint.config.js` enforces. Tests are left out. Arrows
+point from importer to imported. `npm run check` fails when this is stale; `npm run architecture` regenerates it.
+
+<!-- module-map:start -->
+```mermaid
+flowchart LR
+  _evenrealities_even_hub_sdk["@evenrealities/even_hub_sdk"]
+  _mtcute["@mtcute"]
+  earshot["earshot"]
+  src_demo["src/demo"]
+  src_glasses["src/glasses"]
+  src_inbox_ts["src/inbox.ts"]
+  src_main_ts["src/main.ts"]
+  src_messenger_contract_ts["src/messenger.contract.ts"]
+  src_messenger_ts["src/messenger.ts"]
+  src_phone["src/phone"]
+  src_store_ts["src/store.ts"]
+  src_telegram["src/telegram"]
+  src_demo --> src_messenger_ts
+  src_glasses --> earshot
+  src_glasses --> src_inbox_ts
+  src_glasses --> src_messenger_ts
+  src_inbox_ts --> earshot
+  src_inbox_ts --> src_messenger_ts
+  src_main_ts --> _evenrealities_even_hub_sdk
+  src_main_ts --> earshot
+  src_main_ts --> src_demo
+  src_main_ts --> src_glasses
+  src_main_ts --> src_inbox_ts
+  src_main_ts --> src_phone
+  src_main_ts --> src_store_ts
+  src_messenger_contract_ts --> src_messenger_ts
+  src_phone --> earshot
+  src_phone --> src_inbox_ts
+  src_phone --> src_messenger_ts
+  src_store_ts --> earshot
+  src_telegram --> _mtcute
+  src_telegram --> earshot
+  src_telegram --> src_messenger_ts
+```
+
+Enforced by `eslint.config.js`:
+
+- **A1** src/telegram, src/google, src/voice, src/demo must not import src/glasses, src/phone.
+- **A1** src/telegram, src/google, src/voice, src/demo must not import Router, Shell, Glasses, boxes, list, text, FRAME_TAG, Screen, View, RouterOptions, ShellOptions, ShellWords, GlassesOptions, GlassesBridge, Box, Frame, MenuItem, Picture, Brightness, Drawing, DrawOp, Input, HoldSource from earshot.
+- **A2** src/glasses, src/phone must not import src/telegram, src/google, src/voice, src/demo.
+- **A2** src (but not src/telegram) must not import @mtcute/.
+- **A3** src (but not src/main.ts) must not import @evenrealities/even_hub_sdk.
+<!-- module-map:end -->
