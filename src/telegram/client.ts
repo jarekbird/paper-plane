@@ -1,7 +1,7 @@
 import type { Lifetime } from 'earshot'
 import { MemoryStorage, TelegramClient, tl } from '@mtcute/web'
-import type { Chat, Message, Messenger } from '../messenger.ts'
-import { toChat, toMessage } from './map.ts'
+import type { Messenger } from '../messenger.ts'
+import { messengerOver } from './messenger.ts'
 
 export interface TelegramApp {
   apiId: number
@@ -33,9 +33,6 @@ export interface Telegram extends Messenger {
   signOut(): Promise<void>
 }
 
-const DIALOGS = 100
-const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'history_read'])
-
 const PROBLEMS: [code: string, problem: SignInProblem][] = [
   ['PHONE_NUMBER_INVALID', 'phone'],
   ['PHONE_CODE_INVALID', 'code'],
@@ -58,16 +55,11 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     storage: new MemoryStorage(),
     ...(app.test ? { testMode: true } : {}),
   })
-  const listeners = new Set<() => void>()
+  const messenger = messengerOver(client)
   let pending: { phone: string; hash: string } | null = null
 
-  const tell = (update: { name: string }) => {
-    if (!CHANGES.has(update.name)) return
-    for (const listener of [...listeners]) listener()
-  }
-  client.onUpdate.add(tell)
   life.own(() => {
-    client.onUpdate.remove(tell)
+    messenger.close()
     void client.destroy()
   })
 
@@ -124,23 +116,11 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
       await life.guard(place.save(null))
       await life.guard(client.logOut())
     },
-    chats: async () => {
-      const chats: Chat[] = []
-      for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) chats.push(toChat(dialog))
-      return chats
-    },
-    history: async (chat, limit) => {
-      const newestFirst = await client.getHistory(Number(chat), { limit })
-      return newestFirst
-        .filter(message => !message.isService)
-        .map(toMessage)
-        .reverse()
-    },
-    send: async (chat, text): Promise<Message> => toMessage(await client.sendText(Number(chat), text)),
-    read: chat => client.readHistory(Number(chat)),
-    onChange: told => {
-      listeners.add(told)
-      return () => void listeners.delete(told)
-    },
+    chats: messenger.chats,
+    history: messenger.history,
+    send: messenger.send,
+    read: messenger.read,
+    unsend: messenger.unsend,
+    onChange: messenger.onChange,
   }
 }

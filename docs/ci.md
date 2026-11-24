@@ -14,7 +14,9 @@ the job and the config in one change.
 ## Merging
 
 A pull request is ready when `check` is green on its head commit and skill `review-loop` approved that commit.
-Jarek merges; no agent merges on its own.
+Merging, for the hackathon week (Jarek, 2026-11-23: "I merge after review"): the author merges its own pull request
+once every focus of skill `review-loop` has approved and CI `check` is green on the head commit. A change to a rule in
+`CLAUDE.md` still needs Jarek's OK first.
 
 Not set up: a merge queue (t3-g2's `.mergify.yml` is not ported) and branch protection. Until they are, nothing but
 this page keeps an unchecked commit off `main`.

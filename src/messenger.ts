@@ -22,7 +22,6 @@ export interface Messenger {
   history(chat: string, limit: number): Promise<Message[]>
   send(chat: string, text: string): Promise<Message>
   read(chat: string): Promise<void>
+  unsend(message: Message): Promise<void>
   onChange(told: () => void): () => void
 }
-
-export type Drafter = (chat: Chat, newestLast: readonly Message[], signal: AbortSignal) => Promise<string>

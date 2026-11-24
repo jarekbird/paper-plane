@@ -14,6 +14,8 @@ you say into a message), in one flow.
 | Your picked chats, with what is new  | You choose the chats on the phone; nothing else reaches the glasses |
 | The newest message of a chat         | Tap a chat                                                         |
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
+| A short answer without speaking      | Tap the chat, pick Yes, No or one of your own phrases, tap         |
+| A message taken back                 | "Sent. Tap to undo" for five seconds                               |
 | Anything else by voice               | Hold and say it: "open launch crew", "go back"                     |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap

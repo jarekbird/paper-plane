@@ -28,6 +28,6 @@ description: The development process for Paper Plane, from a decided item to an 
 5. **Review.** Use skill `review-loop`.
 6. **Pull request.** Rebase onto `origin/main`, run `npm run check` once on that commit, push the branch and open a
    pull request into `main`. The body follows `.github/pull_request_template.md`; every section is required. CI
-   (`docs/ci.md`) must be green on the exact head commit. Jarek merges. Remove the worktree once it merges.
+   (`docs/ci.md`) must be green on the exact head commit. Who merges: `docs/ci.md`. Remove the worktree once it merges.
 
 Shipping to the Even Hub is not set up (`docs/ci.md`).
