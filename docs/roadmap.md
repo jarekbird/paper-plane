@@ -25,9 +25,9 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
 | 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |
 | 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        |                          |
-| 7   | Quick replies: three short answers from fixed rules and the user's own phrases; replaces "Draft a reply"    |                          |
+| 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
 | 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | open and back built      |
-| 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 |                          |
+| 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
 | 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         |                          |
 | 11  | Park it: an unsent reply stays as a Telegram draft; "save this" goes to Saved Messages                     |                          |
 | 12  | Reactions: "like that"                                                                                     |                          |
@@ -48,7 +48,8 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 ## How each feature is tested
 
 - Unit tests on Earshot's stand-in glasses for every screen and rule.
-- One contract test, run against the sample account and against Telegram's test servers.
+- One contract test, run against the sample account in CI. Telegram's test servers stopped taking test numbers in
+  2026, so against Telegram it runs by hand on Jarek's own account, writing only to Saved Messages.
 - A simulator run per screen, with a recording.
 - A voice test: about 40 phrases against the real navigator, with the score in the README.
 - Failure paths: wrong code, lost connection, Telegram's wait limits.

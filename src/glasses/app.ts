@@ -11,17 +11,20 @@ import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   Shell,
-  text,
   wrapText,
   type Action,
   type Agent,
+  type Box,
   type Glasses,
   type Lifetime,
   type Screen,
+  type Timer,
   type VoiceOptions,
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
-import type { Chat, Drafter, Message, Messenger } from '../messenger.ts'
+import type { Chat, Message, Messenger } from '../messenger.ts'
+import type { Phrases } from '../phrases.ts'
+import { quickReplies } from '../replies.ts'
 
 export interface Hearing {
   transcribe: VoiceOptions['transcribe']
@@ -31,7 +34,7 @@ export interface Hearing {
 export interface GlassesParts {
   inbox: Inbox
   messenger: Messenger
-  drafter: Drafter
+  phrases: Phrases
   hearing?: Hearing
 }
 
@@ -42,21 +45,24 @@ export interface GlassesApp {
 
 const HISTORY = 6
 const DIM = 2
-const DRAFT_ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
+const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
+const UNDO_MS = 5_000
 const WORDS = {
   title: 'Paper Plane',
   noChats: 'Pick your chats on the phone',
   loading: 'Loading…',
   noLoad: 'Could not load this chat',
   noMessages: 'No messages yet',
-  nothingToAnswer: 'Nothing to answer yet',
-  drafting: 'Writing a reply…',
-  noDraft: 'Could not write a reply',
-  goBack: 'Double tap to go back',
+  tapToReply: 'Tap to reply',
   tapToSend: 'Tap to send',
   sending: 'Sending…',
-  sent: 'Sent',
   notSent: 'Not sent. Tap to try again',
+  undo: 'Sent. Tap to undo',
+  undone: 'Taken back',
+  notUndone: 'Could not take it back',
+  nothingToUndo: 'Nothing to undo',
+  end: 'That is the end',
+  start: 'That is the start',
 }
 
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
@@ -64,109 +70,117 @@ const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})
 const line = (chat: Chat | undefined, message: Message) =>
   message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
 
+const page = (title: string, body: string, foot: string): Box[] => [
+  { id: 'title', x: 0, y: 0, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: fitText(oneLine(title), SCREEN_WIDTH), brightness: DIM },
+  { id: 'body', x: 0, y: LINE_HEIGHT, w: SCREEN_WIDTH, h: ROWS * LINE_HEIGHT, text: body },
+  { id: 'foot', x: 0, y: SCREEN_HEIGHT - LINE_HEIGHT, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: foot, brightness: DIM },
+]
+
+function scroller(lines: () => readonly string[], redraw: () => void) {
+  let top = 0
+  const last = () => Math.max(0, lines().length - ROWS)
+  const at = () => Math.min(top, last())
+  const move = (by: number) => () => {
+    top = Math.max(0, Math.min(last(), at() + by))
+    redraw()
+  }
+  return {
+    shown: () =>
+      lines()
+        .slice(at(), at() + ROWS)
+        .join('\n'),
+    down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
+    up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
+  }
+}
+
 export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesParts): GlassesApp {
-  const { inbox, messenger, drafter, hearing } = parts
+  const { inbox, messenger, phrases, hearing } = parts
+  const sentIn = new Map<string, (message: Message) => void>()
   let onChat: string | null = null
+  let onReplies: string | null = null
   let onDraft: string | null = null
   let held: string | null = null
 
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
+  const redraw = () => shell.redraw()
 
-  const draftScreen = (id: string, said: string | null, recent: readonly Message[] = []): Screen => {
-    let words = said
-    let lines = said === null ? [] : wrapText(cleanText(said), SCREEN_WIDTH)
-    let top = 0
-    let state: 'writing' | 'unwritten' | 'ready' | 'sending' | 'failed' = said === null ? 'writing' : 'ready'
+  const draftScreen = (id: string, words: string): Screen => {
+    const lines = wrapText(cleanText(words), SCREEN_WIDTH)
+    const scroll = scroller(() => lines, redraw)
+    let state: 'ready' | 'sending' | 'failed' = 'ready'
     let screen: Lifetime | null = null
-    const last = () => Math.max(0, lines.length - DRAFT_ROWS)
-
-    const write = async (entered: Lifetime) => {
-      const chat = inbox.chat(id)
-      let written: string
-      try {
-        if (!chat) throw new Error('No such chat')
-        written = await entered.guard(drafter(chat, recent, entered.signal))
-      } catch (error) {
-        if (error instanceof LifetimeEnded) return
-        state = 'unwritten'
-        shell.redraw()
-        return
-      }
-      words = written
-      lines = wrapText(cleanText(written), SCREEN_WIDTH)
-      state = 'ready'
-      shell.redraw()
-    }
 
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
-      blocked: () =>
-        state === 'sending' ? WORDS.sending : state === 'writing' ? WORDS.drafting : state === 'unwritten' ? WORDS.noDraft : null,
+      blocked: () => (state === 'sending' ? WORDS.sending : null),
       run: async () => {
-        if (!screen || words === null) return
+        if (!screen) return
         state = 'sending'
-        shell.redraw()
+        redraw()
+        let sent: Message
         try {
-          await screen.guard(messenger.send(id, words))
+          sent = await screen.guard(messenger.send(id, words))
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = 'failed'
-          shell.redraw()
+          redraw()
           return
         }
         router.back()
-        shell.notice(WORDS.sent)
+        sentIn.get(id)?.(sent)
       },
     })
-    const scroll = (by: number) => () => {
-      top = Math.max(0, Math.min(last(), top + by))
-      shell.redraw()
-    }
-    const down = action({ id: 'draft-down', say: 'Scroll down', blocked: () => (top < last() ? null : 'That is the end'), run: scroll(2) })
-    const up = action({ id: 'draft-up', say: 'Scroll up', blocked: () => (top > 0 ? null : 'That is the start'), run: scroll(-2) })
-    const body = () =>
-      state === 'writing' ? WORDS.drafting : state === 'unwritten' ? WORDS.noDraft : lines.slice(top, top + DRAFT_ROWS).join('\n')
-    const foot = () =>
-      state === 'ready' ? WORDS.tapToSend : state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : WORDS.goBack
+    const foot = () => (state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
 
     return {
       id: `draft:${id}`,
-      actions: () => [send, down, up],
-      context: () => `A reply to ${titleOf(id)}, not sent yet`,
+      actions: () => [send, scroll.down, scroll.up],
+      context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
         onDraft = id
         entered.own(() => {
           if (onDraft === id) onDraft = null
         })
-        if (said === null) void write(entered)
       },
-      view: () =>
-        boxes(
-          [
-            {
-              id: 'title',
-              x: 0,
-              y: 0,
-              w: SCREEN_WIDTH,
-              h: LINE_HEIGHT,
-              text: fitText(oneLine(`To ${titleOf(id)}`), SCREEN_WIDTH),
-              brightness: DIM,
-            },
-            { id: 'body', x: 0, y: LINE_HEIGHT, w: SCREEN_WIDTH, h: DRAFT_ROWS * LINE_HEIGHT, text: body() },
-            { id: 'foot', x: 0, y: SCREEN_HEIGHT - LINE_HEIGHT, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: foot(), brightness: DIM },
-          ],
-          { on: { tap: send, down, up } },
-        ),
+      view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
     }
   }
+
+  const repliesScreen = (id: string, reply: Action): Screen => ({
+    id: `replies:${id}`,
+    actions: () => [reply],
+    context: () => 'Short answers to choose from',
+    enter: entered => {
+      onReplies = id
+      entered.own(() => {
+        if (onReplies === id) onReplies = null
+      })
+    },
+    view: () => list({ title: `To ${titleOf(id)}`, action: reply }),
+  })
 
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
     let failed = false
     let seen: string | null | undefined
+    let sending = false
+    let undo: { message: Message; timer: Timer } | null = null
+    let screen: Lifetime | null = null
+
+    const lines = (): readonly string[] => {
+      if (failed) return [WORDS.noLoad]
+      if (messages === null) return [WORDS.loading]
+      if (messages.length === 0) return [WORDS.noMessages]
+      const chat = inbox.chat(id)
+      const newestFirst = [...messages].reverse().map(message => line(chat, message))
+      return wrapText(cleanText(newestFirst.join('\n\n')), SCREEN_WIDTH)
+    }
+    const scroll = scroller(lines, redraw)
+
     const load = async (entered: Lifetime) => {
       seen = inbox.chat(id)?.last?.id ?? null
       let loaded: Message[]
@@ -175,33 +189,88 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       } catch (error) {
         if (error instanceof LifetimeEnded) return
         failed = true
-        shell.redraw()
+        redraw()
         return
       }
       messages = loaded
       failed = false
-      shell.redraw()
+      redraw()
       void entered.guard(messenger.read(id)).catch(() => {})
     }
 
-    const draft = action({
-      id: 'draft',
-      say: 'Draft a reply',
-      hint: 'Writes a suggested reply to check before it is sent',
-      blocked: () => (messages?.some(message => !message.mine) ? null : WORDS.nothingToAnswer),
-      run: () => {
-        if (messages) router.open(draftScreen(id, null, messages))
+    const sent = (message: Message) => {
+      if (!screen) return
+      undo?.timer.cancel()
+      const timer = screen.timeout(() => {
+        undo = null
+        redraw()
+      }, UNDO_MS)
+      undo = { message, timer }
+      redraw()
+    }
+
+    const takeBack = action({
+      id: 'undo',
+      say: 'Undo',
+      hint: 'Takes back the message just sent',
+      risk: 'voice',
+      blocked: () => (undo ? null : WORDS.nothingToUndo),
+      run: async () => {
+        const pending = undo
+        if (!pending || !screen) return
+        pending.timer.cancel()
+        undo = null
+        redraw()
+        try {
+          await screen.guard(messenger.unsend(pending.message))
+        } catch (error) {
+          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notUndone)
+          return
+        }
+        shell.notice(WORDS.undone)
+      },
+    })
+
+    const reply: Action = action<string>({
+      id: 'reply',
+      say: 'Reply',
+      hint: 'Sends one short answer to the chat on screen',
+      risk: 'voice',
+      blocked: () => (sending ? WORDS.sending : null),
+      targets: () => {
+        const own = new Set(phrases.list())
+        const newest = messages?.findLast(message => !message.mine)?.text ?? null
+        return quickReplies(newest, phrases.list()).map(text => ({ id: text, say: text, value: text, private: own.has(text) }))
+      },
+      choose: () => router.open(repliesScreen(id, reply)),
+      run: async text => {
+        if (!screen) return
+        sending = true
+        let message: Message
+        try {
+          message = await screen.guard(messenger.send(id, text))
+        } catch (error) {
+          sending = false
+          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notSent)
+          return
+        }
+        sending = false
+        if (onReplies === id) router.back()
+        sent(message)
       },
     })
 
     return {
       id: `chat:${id}`,
-      actions: () => [draft],
-      context: () => `The chat ${titleOf(id)}`,
+      actions: () => [reply, takeBack, scroll.down, scroll.up],
+      context: () => 'One chat, newest message first',
       enter: entered => {
+        screen = entered
         onChat = id
+        sentIn.set(id, sent)
         entered.own(() => {
           if (onChat === id) onChat = null
+          if (sentIn.get(id) === sent) sentIn.delete(id)
         })
         entered.own(
           inbox.onChange(() => {
@@ -211,18 +280,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         void load(entered)
       },
       view: () =>
-        text({
-          title: titleOf(id),
-          body: failed
-            ? WORDS.noLoad
-            : messages === null
-              ? WORDS.loading
-              : messages.length === 0
-                ? WORDS.noMessages
-                : [...messages]
-                    .reverse()
-                    .map(message => line(inbox.chat(id), message))
-                    .join('\n\n'),
+        boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
+          on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
         }),
     }
   }
@@ -247,8 +306,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const dictate: Agent = heard => {
     const chat = held
     const words = heard.words.trim()
-    if (chat === null || !words || (onDraft ?? onChat) !== chat) return { kind: 'notMine' }
-    if (onDraft === chat) router.replace(draftScreen(chat, words))
+    if (chat === null || !words || (onDraft ?? onReplies ?? onChat) !== chat) return { kind: 'notMine' }
+    if (onDraft === chat || onReplies === chat) router.replace(draftScreen(chat, words))
     else router.open(draftScreen(chat, words))
     return { kind: 'handled' }
   }
@@ -265,13 +324,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
             agents: [dictate],
             otherwise: 'A reply to send to the chat on screen',
             onListen: () => {
-              held = onDraft ?? onChat
+              held = onDraft ?? onReplies ?? onChat
             },
           },
         }
       : {},
   )
-  life.own(inbox.onChange(() => shell.redraw()))
+  life.own(inbox.onChange(redraw))
+  life.own(phrases.onChange(redraw))
 
   return { router, shell }
 }

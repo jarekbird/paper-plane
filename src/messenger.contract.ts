@@ -45,6 +45,18 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       expect(await unread()).toBe(0)
     })
 
+    it('takes back a message the user sent, for everyone, and tells listeners', async () => {
+      const { messenger, chat } = await make()
+      const before = (await messenger.history(chat, 1))[0]?.id
+      const sent = await messenger.send(chat, 'Sent by mistake')
+      let told = 0
+      const stop = messenger.onChange(() => told++)
+      await messenger.unsend(sent)
+      expect((await messenger.history(chat, 1))[0]?.id).toBe(before)
+      expect(told).toBeGreaterThan(0)
+      stop()
+    })
+
     it('stops telling a listener that left', async () => {
       const { messenger, chat } = await make()
       let told = 0

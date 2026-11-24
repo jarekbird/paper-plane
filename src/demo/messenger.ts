@@ -1,4 +1,4 @@
-import type { Chat, ChatKind, Drafter, Message, Messenger } from '../messenger.ts'
+import type { Chat, ChatKind, Message, Messenger } from '../messenger.ts'
 
 interface DemoChat {
   id: string
@@ -110,6 +110,13 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       chat.unread = 0
       tell()
     },
+    unsend: async sent => {
+      const chat = find(sent.chat)
+      const at = chat.messages.findIndex(message => message.id === sent.id && message.mine)
+      if (at < 0) throw new Error('No such message')
+      chat.messages.splice(at, 1)
+      tell()
+    },
     onChange: told => {
       listeners.add(told)
       return () => void listeners.delete(told)
@@ -124,10 +131,4 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     },
     sent: () => outbox,
   }
-}
-
-export const demoDrafter: Drafter = async (chat, newestLast) => {
-  const asked = [...newestLast].reverse().find(message => !message.mine)
-  if (!asked) return 'Hello!'
-  return asked.text.trim().endsWith('?') ? 'Yes, that works for me.' : chat.kind === 'group' ? 'Thanks, noted.' : 'Sounds good, thank you.'
 }

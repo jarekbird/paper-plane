@@ -138,6 +138,7 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     },
     send: async (chat, text): Promise<Message> => toMessage(await client.sendText(Number(chat), text)),
     read: chat => client.readHistory(Number(chat)),
+    unsend: message => client.deleteMessagesById(Number(message.chat), [Number(message.id)], { revoke: true }),
     onChange: told => {
       listeners.add(told)
       return () => void listeners.delete(told)

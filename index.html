@@ -26,18 +26,36 @@
         list-style: none;
         padding: 0;
       }
-      label {
+      label span {
+        flex: 1;
+      }
+      small {
+        opacity: 0.6;
+      }
+      label,
+      .row {
         display: flex;
         align-items: center;
         gap: 12px;
         padding: 12px 0;
         border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
       }
-      label span {
+      .row span {
         flex: 1;
       }
-      small {
-        opacity: 0.6;
+      form {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      input[type='text'] {
+        flex: 1;
+        font: inherit;
+        padding: 8px;
+      }
+      button {
+        font: inherit;
+        padding: 8px 12px;
       }
       input[type='checkbox'] {
         width: 22px;

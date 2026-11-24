@@ -76,12 +76,16 @@ flowchart LR
   src_messenger_contract_ts["src/messenger.contract.ts"]
   src_messenger_ts["src/messenger.ts"]
   src_phone["src/phone"]
+  src_phrases_ts["src/phrases.ts"]
+  src_replies_ts["src/replies.ts"]
   src_store_ts["src/store.ts"]
   src_telegram["src/telegram"]
   src_demo --> src_messenger_ts
   src_glasses --> earshot
   src_glasses --> src_inbox_ts
   src_glasses --> src_messenger_ts
+  src_glasses --> src_phrases_ts
+  src_glasses --> src_replies_ts
   src_inbox_ts --> earshot
   src_inbox_ts --> src_messenger_ts
   src_main_ts --> _evenrealities_even_hub_sdk
@@ -90,11 +94,14 @@ flowchart LR
   src_main_ts --> src_glasses
   src_main_ts --> src_inbox_ts
   src_main_ts --> src_phone
+  src_main_ts --> src_phrases_ts
   src_main_ts --> src_store_ts
   src_messenger_contract_ts --> src_messenger_ts
   src_phone --> earshot
   src_phone --> src_inbox_ts
   src_phone --> src_messenger_ts
+  src_phone --> src_phrases_ts
+  src_phrases_ts --> earshot
   src_store_ts --> earshot
   src_telegram --> _mtcute
   src_telegram --> earshot
