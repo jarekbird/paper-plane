@@ -584,4 +584,29 @@ describe('by voice, from any screen', () => {
     await say()
     expect(router.current.id).toBe('chat:sam')
   })
+
+  it('asks which chat, and does nothing else, when "message" on the list is followed by a chat that is not picked and by command words', async () => {
+    const { fake, say, router, sent } = await world(['anna', 'sam'], ['message Robert I will go back tomorrow'])
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(sent()).toEqual([])
+  })
+
+  it('keeps such a sentence as the reply when a chat is open, where replies often start with "tell" or "open"', async () => {
+    const { fake, say, router, sent, openFirst } = await world(
+      ['anna', 'sam'],
+      ['message Robert I will go back tomorrow', 'tell me when you arrive'],
+    )
+    await openFirst()
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Anna', 'message Robert I will go back tomorrow', 'Tap to send'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Anna', 'tell me when you arrive', 'Tap to send'])
+    expect(router.depth).toBe(3)
+    expect(sent()).toEqual([])
+  })
 })

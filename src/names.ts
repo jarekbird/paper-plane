@@ -88,7 +88,14 @@ export function addressed<T extends Named>(words: string, named: readonly T[]): 
   return verbAt >= 0 && found.at === nameAt ? found : { matches: [], rest: '', at: null }
 }
 
-export function commandOf(words: string, named: readonly Named[]): Command | null {
-  const first = tokensOf(words)[0]?.text ?? ''
-  return addressed(words, named).matches.length ? (VERBS.get(first) ?? null) : null
+export function commandOf(words: string): Command | null {
+  return VERBS.get(tokensOf(words)[0]?.text ?? '') ?? null
+}
+
+export function sameWords(a: string, b: string): boolean {
+  const words = (text: string) =>
+    tokensOf(text)
+      .map(token => token.text)
+      .join(' ')
+  return words(a) === words(b)
 }

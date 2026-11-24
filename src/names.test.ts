@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addressed, commandOf, findNamed } from './names.ts'
+import { addressed, commandOf, findNamed, sameWords } from './names.ts'
 
 const chats = [
   { id: 'anna', title: 'Anna Lee' },
@@ -71,22 +71,29 @@ describe('a chat said by name, found on the phone', () => {
   })
 })
 
-describe('a command that names its chat, read on the phone', () => {
-  it('knows a message to a named chat by its first words, whatever the message says', () => {
-    expect(commandOf('message Sam I will go back tomorrow', chats)).toBe('message')
-    expect(commandOf('tell launch crew to go home and open the chat', chats)).toBe('message')
-    expect(commandOf('text Anna mark all read is broken', chats)).toBe('message')
-    expect(commandOf('message to Sam see you there', chats)).toBe('message')
+describe('a command read on the phone by its first word', () => {
+  it('knows a message by its first word, whatever the message says and whether or not a picked chat is named', () => {
+    for (const words of [
+      'message Sam I will go back tomorrow',
+      'tell launch crew to go home and open the chat',
+      'text Anna mark all read is broken',
+      'message to Sam see you there',
+      'message Robert I will go back tomorrow',
+      'message someone',
+      'tell me a joke',
+    ]) {
+      expect(commandOf(words)).toBe('message')
+    }
   })
 
-  it('knows opening a named chat', () => {
-    expect(commandOf('open Sam', chats)).toBe('open')
-    expect(commandOf('show launch crew', chats)).toBe('open')
+  it('knows opening a chat the same way', () => {
+    for (const words of ['open Sam', 'show launch crew', 'open Robert and go back', 'open the door for Sam'])
+      expect(commandOf(words)).toBe('open')
   })
 
-  it('leaves everything else to the navigator: no chat named, or not right after the verb', () => {
-    for (const words of ['message someone', 'tell me a joke', 'open the door for Sam', 'I will message Sam later', 'go back', 'Sam']) {
-      expect(commandOf(words, chats)).toBeNull()
+  it('leaves a sentence that starts with any other word to the navigator', () => {
+    for (const words of ['I will message Sam later', 'please message Sam', 'go back', 'Sam', 'constructor Sam', '']) {
+      expect(commandOf(words)).toBeNull()
     }
   })
 
@@ -100,7 +107,11 @@ describe('a command that names its chat, read on the phone', () => {
   })
 
   it('does not take an ordinary word for a command word', () => {
-    expect(commandOf('constructor Sam', chats)).toBeNull()
     expect(addressed('constructor Sam', chats).matches).toEqual([])
+  })
+
+  it('knows when what was said is exactly an action’s own name', () => {
+    expect(sameWords('Message someone', 'message someone.')).toBe(true)
+    expect(sameWords('Open chat', 'open the chat')).toBe(false)
   })
 })

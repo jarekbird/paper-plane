@@ -25,7 +25,7 @@ import {
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
-import { addressed, commandOf, findNamed } from '../names.ts'
+import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
 
@@ -421,9 +421,12 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const asked = hearing?.model ?? matchWords
   const model: NavigatorModel = {
     choose: (question, turn) => {
-      const command = commandOf(question.words, inbox.picked())
-      const meant = command === 'message' ? message : command === 'open' ? open : null
-      const option = meant && question.options.find(offered => offered.role === undefined && offered.say === meant.say)
+      const command = commandOf(question.words)
+      const offered = question.options.filter(option => option.role === undefined)
+      if (!command || offered.some(option => sameWords(option.say, question.words))) return asked.choose(question, turn)
+      const meant = command === 'message' ? message : open
+      const replying = chatOn.has(router.current) && addressed(question.words, inbox.picked()).matches.length === 0
+      const option = replying ? question.options.find(passed => passed.role === 'pass') : offered.find(one => one.say === meant.say)
       return option ? Promise.resolve({ [option.id]: 1 }) : asked.choose(question, turn)
     },
   }
