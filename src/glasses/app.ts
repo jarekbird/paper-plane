@@ -48,7 +48,6 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
-const SAID_MS = 10_000
 // Earshot's list view keeps 20 px left of its rows for the cursor.
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
@@ -108,7 +107,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   let onReplies: string | null = null
   let onDraft: string | null = null
   let held: string | null = null
-  let said: { words: string; at: number } | null = null
+  let said: { words: string } | null = null
 
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
   const redraw = () => shell.redraw()
@@ -313,8 +312,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const named = () => {
     const heard = said
     said = null
-    if (!heard || Date.now() - heard.at > SAID_MS) return { matches: [], rest: '' }
-    return findNamed(heard.words, inbox.picked())
+    return heard ? findNamed(heard.words, inbox.picked()) : { matches: [], rest: '' }
   }
 
   const pick = (among: readonly Chat[]) => {
@@ -394,7 +392,13 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           voice: {
             transcribe: async (audio, turn) => {
               const words = await turn.guard(hearing.transcribe(audio, turn))
-              said = words ? { words, at: Date.now() } : null
+              const mine = words ? { words } : null
+              said = mine
+              turn.own(() => {
+                void Promise.resolve().then(() => {
+                  if (said === mine) said = null
+                })
+              })
               return words
             },
             ...(hearing.model ? { model: hearing.model } : {}),

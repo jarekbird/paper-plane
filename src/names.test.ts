@@ -36,12 +36,22 @@ describe('a chat said by name, found on the phone', () => {
     expect(findNamed('open the chat', chats)).toEqual({ matches: [], rest: '' })
   })
 
-  it('gives back what was said after the name, as the message, in the user’s own words', () => {
+  it('gives back what was said after the name, word for word, as the message', () => {
     expect(findNamed('tell Sam I’m ten minutes late', chats).rest).toBe('I’m ten minutes late')
     expect(findNamed('message launch crew: Build is green, shipping now', chats).rest).toBe('Build is green, shipping now')
-    expect(findNamed('tell Sam that the demo moved', chats).rest).toBe('the demo moved')
-    expect(findNamed('message Sam saying see you there', chats).rest).toBe('see you there')
+    expect(findNamed('message Sam that was great', chats).rest).toBe('that was great')
+    expect(findNamed('message Sam saying see you there', chats).rest).toBe('saying see you there')
+    expect(findNamed('message Anna Berg to say goodbye is hard', chats).rest).toBe('to say goodbye is hard')
     expect(findNamed('open sam', chats).rest).toBe('')
+  })
+
+  it('takes the first chat named as the one meant: a name later in the sentence is part of the message', () => {
+    expect(findNamed('message Anna Lee ask Launch crew about the demo', chats)).toEqual({
+      matches: [chats[0]],
+      rest: 'ask Launch crew about the demo',
+    })
+    expect(findNamed('tell Sam Anna Berg is running late', chats)).toEqual({ matches: [chats[3]], rest: 'Anna Berg is running late' })
+    expect(ids('tell anna that launch crew is waiting')).toEqual(['anna', 'annab'])
   })
 
   it('gives back no message when the chat is not certain', () => {

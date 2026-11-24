@@ -14,7 +14,7 @@ interface Token {
 }
 
 const WORD = /[\p{L}\p{N}]+/gu
-const LEAD = /^[\s,:;.-]*(?:(?:saying|that|to say)\b)?[\s,:;.-]*/i
+const LEAD = /^[\s,:;.-]+/
 const FUZZY_FROM = 5
 const FIRST_NAME_FROM = 3
 
@@ -35,28 +35,36 @@ function distance(a: string, b: string): number {
 const same = (said: string, wanted: string) =>
   said === wanted || (said.length >= FUZZY_FROM && wanted.length >= FUZZY_FROM && distance(said, wanted) <= 1)
 
-function runEnd(said: readonly Token[], wanted: readonly string[]): number | null {
+interface Run {
+  start: number
+  length: number
+  end: number
+}
+
+function firstRun(said: readonly Token[], wanted: readonly string[]): Run | null {
   for (let start = 0; start + wanted.length <= said.length; start++) {
-    if (wanted.every((word, at) => same(said[start + at].text, word))) return said[start + wanted.length - 1].end
+    if (wanted.every((word, at) => same(said[start + at].text, word))) {
+      return { start, length: wanted.length, end: said[start + wanted.length - 1].end }
+    }
   }
   return null
 }
 
+const sooner = (a: Run, b: Run) => a.start - b.start || b.length - a.length
+
 export function findNamed<T extends Named>(words: string, named: readonly T[]): Found<T> {
   const said = tokensOf(words)
-  let best = 0
-  let found: { item: T; end: number }[] = []
+  const found: { item: T; run: Run }[] = []
   for (const item of named) {
     const title = tokensOf(item.title).map(token => token.text)
     if (title.length === 0) continue
-    const whole = runEnd(said, title)
-    const first = whole === null && title.length > 1 && title[0].length >= FIRST_NAME_FROM ? runEnd(said, [title[0]]) : null
-    const end = whole ?? first
-    if (end === null) continue
-    const score = whole === null ? 1 : title.length + 1
-    if (score > best) [best, found] = [score, []]
-    if (score === best) found.push({ item, end })
+    const whole = firstRun(said, title)
+    const first = title.length > 1 && title[0].length >= FIRST_NAME_FROM ? firstRun(said, [title[0]]) : null
+    const run = [whole, first].filter(candidate => candidate !== null).sort(sooner)[0]
+    if (run) found.push({ item, run })
   }
-  const rest = found.length === 1 ? words.slice(found[0].end).replace(LEAD, '').trim() : ''
-  return { matches: found.map(entry => entry.item), rest }
+  found.sort((a, b) => sooner(a.run, b.run))
+  const meant = found.filter(entry => sooner(entry.run, found[0].run) === 0)
+  const rest = meant.length === 1 ? words.slice(meant[0].run.end).replace(LEAD, '').trim() : ''
+  return { matches: meant.map(entry => entry.item), rest }
 }

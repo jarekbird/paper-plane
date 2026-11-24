@@ -464,13 +464,25 @@ describe('by voice, from any screen', () => {
     expect(fake.lines()).toEqual(['Paper Plane', '> Anna', 'Launch crew'])
   })
 
-  it('A5: does not use what was said in an earlier hold for a later touch', async () => {
+  it('A5: does not use what was said in an earlier hold for a touch that follows at once', async () => {
     const { fake, say, router } = await world(['anna', 'sam'], ['Sam'])
     await say()
     expect(router.depth).toBe(1)
-    await settle(11_000)
     fake.pick('Message someone')
     await settle()
     expect(router.current.id).toBe('pick-chat')
+  })
+
+  it('A5: does not aim a reply dictated in one chat at another chat named in it', async () => {
+    const { fake, say, router, sent, openFirst } = await world(['anna', 'sam'], ['Sam must not see this'])
+    await openFirst()
+    await say()
+    expect(fake.lines().slice(0, 2)).toEqual(['To Anna', 'Sam must not see this'])
+    fake.double()
+    await settle()
+    fake.pick('Message someone')
+    await settle()
+    expect(router.current.id).toBe('pick-chat')
+    expect(sent()).toEqual([])
   })
 })
