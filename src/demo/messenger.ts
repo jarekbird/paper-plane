@@ -122,7 +122,8 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       chat.messages.splice(at, 1)
       tell()
     },
-    keep: async (id, text) => {
+    keep: async (id, text, signal) => {
+      signal.throwIfAborted()
       find(id)
       if (drafts.has(id)) return false
       drafts.set(id, text)

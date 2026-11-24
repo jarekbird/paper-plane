@@ -626,7 +626,7 @@ describe('a reply kept for later', () => {
 
   it('never replaces a draft that is already waiting on the phone', async () => {
     const { fake, say, router, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
-    await messenger.keep('anna', 'typed on the phone')
+    await messenger.keep('anna', 'typed on the phone', new AbortController().signal)
     await openFirst()
     await say()
     fake.pick('Keep for later')
@@ -652,9 +652,9 @@ describe('a reply kept for later', () => {
     const { fake, say, sent, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
     let release = () => {}
     const keep = messenger.keep
-    messenger.keep = async (chat, text) => {
+    messenger.keep = async (chat, text, signal) => {
       await new Promise<void>(resolve => (release = resolve))
-      return keep(chat, text)
+      return keep(chat, text, signal)
     }
     await openFirst()
     await say()
@@ -666,6 +666,50 @@ describe('a reply kept for later', () => {
     await settle()
     expect(sent()).toEqual([])
     expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+  })
+})
+
+describe('a reply kept for later, when the user moves on', () => {
+  it('is still kept when the user leaves the reply before Telegram has answered, and says so', async () => {
+    const { fake, say, router, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = messenger.keep
+    messenger.keep = async (chat, text, signal) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text, signal)
+    }
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    fake.double()
+    await settle()
+    expect(router.current.id).toBe('chat:anna')
+    release()
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+    expect(router.current.id).toBe('chat:anna')
+    expect(fake.overlay()).toContain('Kept as a draft')
+  })
+
+  it('A4: is not kept, and nothing is said, once the app has ended', async () => {
+    const w = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = w.messenger.keep
+    w.messenger.keep = async (chat, text, signal) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text, signal)
+    }
+    await w.openFirst()
+    await w.say()
+    w.fake.pick('Keep for later')
+    await settle()
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.life.end()
+    release()
+    await settle()
+    expect(w.messenger.drafts().size).toBe(0)
+    expect(noticed).not.toHaveBeenCalled()
   })
 })
 
@@ -693,6 +737,40 @@ describe('the newest message from someone else', () => {
     fake.tap()
     await settle()
     expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('A5: is not liked by a tap that comes while a newer message is still loading', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['like that'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    const history = messenger.history
+    let release = () => {}
+    messenger.history = async (chat, limit) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return history(chat, limit)
+    }
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    fake.tap()
+    await settle()
+    messenger.history = history
+    release()
+    await settle()
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('S5: is not liked or saved when it is not on screen, after six of the user’s own replies', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    for (let n = 1; n <= 6; n++) await messenger.send('sam', `Reply ${n}`)
+    await openFirst()
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('No message from someone else on screen')
+    fake.pick('Save')
+    await settle()
+    expect((await messenger.history('sam', 10)).some(message => message.liked)).toBe(false)
+    expect(messenger.saved()).toEqual([])
   })
 
   it('is not liked twice', async () => {

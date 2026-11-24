@@ -60,8 +60,17 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
 
     it('keeps a reply as the chat’s draft, but never over a draft that is already waiting', async () => {
       const { messenger, chat } = await make()
-      expect(await messenger.keep(chat, 'See you at noon')).toBe(true)
-      expect(await messenger.keep(chat, 'Something else')).toBe(false)
+      const live = new AbortController().signal
+      expect(await messenger.keep(chat, 'See you at noon', live)).toBe(true)
+      expect(await messenger.keep(chat, 'Something else', live)).toBe(false)
+    })
+
+    it('A4: keeps nothing for a caller that has already gone', async () => {
+      const { messenger, chat } = await make()
+      const gone = new AbortController()
+      gone.abort()
+      await expect(messenger.keep(chat, 'Too late', gone.signal)).rejects.toThrow()
+      expect(await messenger.keep(chat, 'In time', new AbortController().signal)).toBe(true)
     })
 
     it('copies a message to Saved Messages', async () => {

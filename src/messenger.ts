@@ -24,7 +24,7 @@ export interface Messenger {
   send(chat: string, text: string): Promise<Message>
   read(chat: string): Promise<void>
   unsend(message: Message): Promise<void>
-  keep(chat: string, text: string): Promise<boolean>
+  keep(chat: string, text: string, signal: AbortSignal): Promise<boolean>
   save(message: Message): Promise<void>
   like(message: Message): Promise<void>
   onChange(told: () => void): () => void

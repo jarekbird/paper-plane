@@ -98,6 +98,20 @@ describe('the Telegram adapter', () => {
     expect(history.map(message => message.text)).toEqual(['Build is green.'])
   })
 
+  it('A4: does not save a draft when its caller goes while Telegram is still being asked for one', async () => {
+    const fake = fakeClient()
+    let answer = () => {}
+    let saves = 0
+    fake.client.getPeerDialogs = () => new Promise(resolve => (answer = () => resolve([null])))
+    fake.client.saveDraft = async () => void saves++
+    const caller = new AbortController()
+    const keeping = messengerOver(fake.client).keep('42', 'See you at noon', caller.signal)
+    caller.abort()
+    answer()
+    await expect(keeping).rejects.toThrow()
+    expect(saves).toBe(0)
+  })
+
   it('stops listening to the client when it is closed', () => {
     const fake = fakeClient()
     messengerOver(fake.client).close()

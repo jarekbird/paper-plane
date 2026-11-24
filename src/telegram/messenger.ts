@@ -57,8 +57,10 @@ export function messengerOver(client: ClientLike): Messenger & { close(): void }
       await client.deleteMessagesById(Number(message.chat), [Number(message.id)], { revoke: true })
       changed()
     },
-    keep: async (chat, text) => {
+    keep: async (chat, text, signal) => {
+      signal.throwIfAborted()
       const [dialog] = await client.getPeerDialogs(Number(chat))
+      signal.throwIfAborted()
       if (dialog?.draftMessage?.text) return false
       await client.saveDraft(Number(chat), { message: text })
       return true

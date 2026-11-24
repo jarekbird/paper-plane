@@ -73,7 +73,7 @@ const WORDS = {
   draftWaiting: 'Your phone already has a draft',
   notKept: 'Could not keep it',
   newestMessage: 'the newest message',
-  nothingFromOthers: 'No message from someone else',
+  nothingFromOthers: 'No message from someone else on screen',
   liked: 'Liked',
   alreadyLiked: 'Already liked',
   notLiked: 'Could not like it',
@@ -189,7 +189,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         redraw()
         let kept: boolean
         try {
-          kept = await screen.guard(messenger.keep(id, words))
+          kept = await life.guard(messenger.keep(id, words, life.signal))
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = before
@@ -236,6 +236,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     let messages: Message[] | null = null
     let failed = false
     let seen: string | null | undefined
+    let loading = 0
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
@@ -253,15 +254,18 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
 
     const load = async (entered: Lifetime) => {
       seen = inbox.chat(id)?.last?.id ?? null
+      loading++
       let loaded: Message[]
       try {
         loaded = await entered.guard(messenger.history(id, HISTORY))
       } catch (error) {
+        loading--
         if (error instanceof LifetimeEnded) return
         failed = true
         redraw()
         return
       }
+      loading--
       messages = loaded
       failed = false
       redraw()
@@ -301,7 +305,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
-    const newest = () => messages?.findLast(message => !message.mine) ?? null
+    const current = () => loading === 0 && (inbox.chat(id)?.last?.id ?? null) === seen
+    const newest = () => (current() ? (messages?.findLast(message => !message.mine) ?? null) : null)
     const onNewest = (spec: {
       id: string
       say: string
@@ -333,6 +338,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         hint: spec.hint,
         risk: 'voice',
         blocked: () => {
+          if (!current()) return WORDS.loading
           const message = newest()
           return message ? (spec.refused?.(message) ?? null) : WORDS.nothingFromOthers
         },
