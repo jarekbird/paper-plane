@@ -6,6 +6,7 @@ import {
   LifetimeEnded,
   LINE_HEIGHT,
   list,
+  matchWords,
   oneLine,
   Router,
   SCREEN_HEIGHT,
@@ -17,13 +18,14 @@ import {
   type Box,
   type Glasses,
   type Lifetime,
+  type NavigatorModel,
   type Screen,
   type Timer,
   type VoiceOptions,
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
-import { findNamed } from '../names.ts'
+import { commandOf, findNamed } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
 
@@ -55,6 +57,8 @@ const WORDS = {
   whichChat: 'Which chat?',
   noSuchChat: 'No chat by that name',
   nothingUnread: 'Nothing is unread',
+  listedChats: 'the chats on the list',
+  notRead: 'Could not mark them read',
   noChats: 'Pick your chats on the phone',
   loading: 'Loading…',
   noLoad: 'Could not load this chat',
@@ -309,14 +313,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const named = () => {
     const heard = said
     said = null
-    return heard ? findNamed(heard.words, inbox.picked()) : { matches: [], rest: '' }
+    return heard ? findNamed(heard.words, inbox.picked()) : { matches: [], rest: '', at: null }
   }
 
   const pick = (among: readonly Chat[]) => {
     const offered = () => (among.length ? inbox.picked().filter(chat => among.some(wanted => wanted.id === chat.id)) : inbox.picked())
     const one = action<Chat>({
       id: 'open-one',
-      say: 'Open chat',
+      say: 'Choose chat',
       targets: () => chatTargets(offered()),
       run: chat => router.jump(chatScreen(chat.id)),
     })
@@ -357,16 +361,28 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     run: chat => router.open(chatScreen(chat.id)),
   })
 
-  const readAll = action({
+  const unread = () =>
+    inbox
+      .picked()
+      .filter(chat => chat.unread > 0)
+      .map(chat => chat.id)
+      .sort()
+  const markRead = async (ids: readonly string[]) => {
+    await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+  }
+
+  const readAll = action<readonly string[]>({
     id: 'read-all',
     say: 'Mark all read',
     hint: 'Marks every chat on the list as read',
     risk: 'voice',
-    blocked: () => (inbox.picked().some(chat => chat.unread > 0) ? null : WORDS.nothingUnread),
-    run: async () => {
-      const unread = inbox.picked().filter(chat => chat.unread > 0)
-      await life.guard(Promise.all(unread.map(chat => messenger.read(chat.id))))
+    blocked: () => (unread().length ? null : WORDS.nothingUnread),
+    targets: () => {
+      const ids = unread()
+      return [{ id: ids.join(' '), say: WORDS.listedChats, value: ids }]
     },
+    choose: () => void markRead(unread()).then(redraw, () => shell.notice(WORDS.notRead)),
+    run: markRead,
   })
 
   const router: Router = new Router({
@@ -396,6 +412,16 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     return { kind: 'handled' }
   }
 
+  const asked = hearing?.model ?? matchWords
+  const model: NavigatorModel = {
+    choose: (question, turn) => {
+      const command = commandOf(question.words, inbox.picked())
+      const meant = command === 'message' ? message : command === 'open' ? open : null
+      const option = meant && question.options.find(offered => offered.role === undefined && offered.say === meant.say)
+      return option ? Promise.resolve({ [option.id]: 1 }) : asked.choose(question, turn)
+    },
+  }
+
   const shell: Shell = new Shell(
     life,
     glasses,
@@ -414,7 +440,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
               })
               return words
             },
-            ...(hearing.model ? { model: hearing.model } : {}),
+            model,
             agents: [choose, dictate],
             otherwise: 'A reply to send to the chat on screen, or the name of a chat to choose',
             onListen: () => {

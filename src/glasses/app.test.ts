@@ -517,4 +517,43 @@ describe('by voice, from any screen', () => {
     expect(fake.lines()).toEqual(['Which chat?', '> Anna', 'Sam'])
     expect(sent()).toEqual([])
   })
+
+  it('takes "message <chat>" as a message whatever follows, also words that are commands on their own', async () => {
+    const { fake, say, sent } = await world(['anna', 'sam'], ['message Sam I will go back tomorrow'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Sam', 'I will go back tomorrow', 'Tap to send'])
+    expect(sent()).toEqual([])
+  })
+
+  it('S1: asks no model at all when the command names its chat', async () => {
+    let asked = 0
+    const model: NavigatorModel = {
+      choose: async () => {
+        asked++
+        return {}
+      },
+    }
+    const { say, router } = await world(['anna', 'launch'], ['open launch crew'], [], model)
+    await say()
+    expect(router.current.id).toBe('chat:launch')
+    expect(asked).toBe(0)
+  })
+
+  it('A5: marks read only the chats that were unread and picked when it was said', async () => {
+    const { fake, say, unread, inbox } = await world(['anna'], ['mark all read'])
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    await inbox.pick(['launch'])
+    fake.tap()
+    await settle()
+    expect([await unread('anna'), await unread('launch')]).toEqual([2, 1])
+  })
+
+  it('marks every picked chat read at once when it is chosen by touch', async () => {
+    const { fake, unread } = await world(['anna', 'launch'])
+    fake.pick('Mark all read')
+    await settle()
+    expect([await unread('anna'), await unread('launch')]).toEqual([0, 0])
+  })
 })

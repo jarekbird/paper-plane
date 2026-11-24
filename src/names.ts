@@ -6,7 +6,10 @@ export interface Named {
 export interface Found<T extends Named> {
   matches: T[]
   rest: string
+  at: number | null
 }
+
+export type Command = 'open' | 'message'
 
 interface Token {
   text: string
@@ -66,5 +69,15 @@ export function findNamed<T extends Named>(words: string, named: readonly T[]): 
   found.sort((a, b) => sooner(a.run, b.run))
   const meant = found.filter(entry => sooner(entry.run, found[0].run) === 0)
   const rest = meant.length === 1 ? words.slice(meant[0].run.end).replace(LEAD, '').trim() : ''
-  return { matches: meant.map(entry => entry.item), rest }
+  return { matches: meant.map(entry => entry.item), rest, at: meant.length ? meant[0].run.start : null }
+}
+
+const VERBS: Record<string, Command> = { message: 'message', tell: 'message', text: 'message', open: 'open', show: 'open' }
+
+export function commandOf(words: string, named: readonly Named[]): Command | null {
+  const said = tokensOf(words).map(token => token.text)
+  const command = VERBS[said[0] ?? '']
+  if (!command) return null
+  const nameAt = command === 'message' && said[1] === 'to' ? 2 : 1
+  return findNamed(words, named).at === nameAt ? command : null
 }

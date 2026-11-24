@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findNamed } from './names.ts'
+import { commandOf, findNamed } from './names.ts'
 
 const chats = [
   { id: 'anna', title: 'Anna Lee' },
@@ -33,7 +33,7 @@ describe('a chat said by name, found on the phone', () => {
   })
 
   it('finds nothing when no chat is named', () => {
-    expect(findNamed('open the chat', chats)).toEqual({ matches: [], rest: '' })
+    expect(findNamed('open the chat', chats)).toEqual({ matches: [], rest: '', at: null })
   })
 
   it('gives back what was said after the name, word for word, as the message', () => {
@@ -56,12 +56,37 @@ describe('a chat said by name, found on the phone', () => {
     expect(findNamed('message Anna Lee ask Launch crew about the demo', chats)).toEqual({
       matches: [chats[0]],
       rest: 'ask Launch crew about the demo',
+      at: 1,
     })
-    expect(findNamed('tell Sam Anna Berg is running late', chats)).toEqual({ matches: [chats[3]], rest: 'Anna Berg is running late' })
+    expect(findNamed('tell Sam Anna Berg is running late', chats)).toEqual({
+      matches: [chats[3]],
+      rest: 'Anna Berg is running late',
+      at: 1,
+    })
     expect(ids('tell anna that launch crew is waiting')).toEqual(['anna', 'annab'])
   })
 
   it('gives back no message when the chat is not certain', () => {
     expect(findNamed('tell anna I am late', chats).rest).toBe('')
+  })
+})
+
+describe('a command that names its chat, read on the phone', () => {
+  it('knows a message to a named chat by its first words, whatever the message says', () => {
+    expect(commandOf('message Sam I will go back tomorrow', chats)).toBe('message')
+    expect(commandOf('tell launch crew to go home and open the chat', chats)).toBe('message')
+    expect(commandOf('text Anna mark all read is broken', chats)).toBe('message')
+    expect(commandOf('message to Sam see you there', chats)).toBe('message')
+  })
+
+  it('knows opening a named chat', () => {
+    expect(commandOf('open Sam', chats)).toBe('open')
+    expect(commandOf('show launch crew', chats)).toBe('open')
+  })
+
+  it('leaves everything else to the navigator: no chat named, or not right after the verb', () => {
+    for (const words of ['message someone', 'tell me a joke', 'open the door for Sam', 'I will message Sam later', 'go back', 'Sam']) {
+      expect(commandOf(words, chats)).toBeNull()
+    }
   })
 })
