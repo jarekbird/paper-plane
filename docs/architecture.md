@@ -50,7 +50,7 @@ flowchart TB
   worker -- "sign-in" --> gapi
 ```
 
-Three things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
+Two things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
 live only on the Worker (S3), which stores nothing but a Google sign-in on its way to the phone (S7).
 
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
