@@ -16,7 +16,7 @@ you say into a message), in one flow.
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
 | A short answer without speaking      | Tap the chat, pick Yes, No or one of your own phrases, tap         |
 | A message taken back                 | "Sent. Tap to undo" for five seconds                               |
-| Anything else by voice               | Hold and say it: "open launch crew", "go back"                     |
+| Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
 sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds.

@@ -6,6 +6,7 @@ import {
   LifetimeEnded,
   LINE_HEIGHT,
   list,
+  matchWords,
   oneLine,
   Router,
   SCREEN_HEIGHT,
@@ -17,12 +18,14 @@ import {
   type Box,
   type Glasses,
   type Lifetime,
+  type NavigatorModel,
   type Screen,
   type Timer,
   type VoiceOptions,
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
+import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
 
@@ -51,6 +54,11 @@ const UNDO_MS = 5_000
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
   title: 'Paper Plane',
+  whichChat: 'Which chat?',
+  noSuchChat: 'No chat by that name',
+  nothingUnread: 'Nothing is unread',
+  listedChats: 'the chats on the list',
+  notRead: 'Could not mark them read',
   noChats: 'Pick your chats on the phone',
   loading: 'Loading…',
   noLoad: 'Could not load this chat',
@@ -66,6 +74,11 @@ const WORDS = {
   nothingToUndo: 'Nothing to undo',
   end: 'That is the end',
   start: 'That is the start',
+}
+
+const showable = (words: string) => {
+  const shown = cleanText(words).trim()
+  return /[\p{L}\p{N}]/u.test(shown) ? shown : ''
 }
 
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
@@ -100,16 +113,16 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
 export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesParts): GlassesApp {
   const { inbox, messenger, phrases, hearing } = parts
   const sentIn = new Map<string, (message: Message) => void>()
-  let onChat: string | null = null
-  let onReplies: string | null = null
-  let onDraft: string | null = null
-  let held: string | null = null
+  const chatOn = new WeakMap<Screen, { chat: string; covers: boolean }>()
+  const choices = new WeakMap<Screen, () => Chat[]>()
+  let held: Screen | null = null
+  let said: { words: string } | null = null
 
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
   const redraw = () => shell.redraw()
 
   const draftScreen = (id: string, given: string): Screen => {
-    const words = cleanText(given).trim()
+    const words = showable(given)
     const lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
     let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
@@ -148,28 +161,23 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
-        onDraft = id
-        entered.own(() => {
-          if (onDraft === id) onDraft = null
-        })
       },
       view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
     }
+    chatOn.set(self, { chat: id, covers: true })
     return self
   }
 
-  const repliesScreen = (id: string, reply: Action): Screen => ({
-    id: `replies:${id}`,
-    actions: () => [reply],
-    context: () => 'Short answers to choose from',
-    enter: entered => {
-      onReplies = id
-      entered.own(() => {
-        if (onReplies === id) onReplies = null
-      })
-    },
-    view: () => list({ title: `To ${titleOf(id)}`, action: reply }),
-  })
+  const repliesScreen = (id: string, reply: Action): Screen => {
+    const self: Screen = {
+      id: `replies:${id}`,
+      actions: () => [reply],
+      context: () => 'Short answers to choose from',
+      view: () => list({ title: `To ${titleOf(id)}`, action: reply }),
+    }
+    chatOn.set(self, { chat: id, covers: true })
+    return self
+  }
 
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
@@ -277,16 +285,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
-    return {
+    const self: Screen = {
       id: `chat:${id}`,
       actions: () => [reply, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
-        onChat = id
         sentIn.set(id, sent)
         entered.own(() => {
-          if (onChat === id) onChat = null
           if (sentIn.get(id) === sent) sentIn.delete(id)
         })
         entered.own(
@@ -301,14 +307,88 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
         }),
     }
+    chatOn.set(self, { chat: id, covers: false })
+    return self
+  }
+
+  const chatTargets = (chats: readonly Chat[]) => chats.map(chat => ({ id: chat.id, say: label(chat), value: chat, private: true }))
+
+  const named = () => {
+    const heard = said
+    said = null
+    return heard ? addressed(heard.words, inbox.picked()) : { matches: [], rest: '', at: null }
+  }
+
+  const pick = (among: readonly Chat[]) => {
+    const offered = () => (among.length ? inbox.picked().filter(chat => among.some(wanted => wanted.id === chat.id)) : inbox.picked())
+    const one = action<Chat>({
+      id: 'open-one',
+      say: 'Choose chat',
+      targets: () => chatTargets(offered()),
+      run: chat => router.jump(chatScreen(chat.id)),
+    })
+    const picker: Screen = {
+      id: 'pick-chat',
+      actions: () => [one],
+      context: () => 'A list of chats to choose one from',
+      view: () => list({ title: WORDS.whichChat, action: one, empty: WORDS.noChats }),
+    }
+    choices.set(picker, offered)
+    router.open(picker)
   }
 
   const open: Action = action<Chat>({
     id: 'open',
     say: 'Open chat',
-    hint: 'Shows the newest messages of one chat',
-    targets: () => inbox.picked().map(chat => ({ id: chat.id, say: label(chat), value: chat })),
+    hint: 'Shows the newest messages of one chat, which the user may name',
+    targets: () => chatTargets(inbox.picked()),
+    choose: () => {
+      const { matches } = named()
+      if (matches.length === 1) router.jump(chatScreen(matches[0].id))
+      else pick(matches)
+    },
     run: chat => router.open(chatScreen(chat.id)),
+  })
+
+  const message: Action = action<Chat>({
+    id: 'message',
+    say: 'Message someone',
+    hint: 'Starts a message to a chat the user names, with the words that follow the name',
+    targets: () => chatTargets(inbox.picked()),
+    choose: () => {
+      const { matches, rest } = named()
+      if (matches.length !== 1) pick(matches)
+      else if (showable(rest)) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest))
+      else router.jump(chatScreen(matches[0].id))
+    },
+    run: chat => router.open(chatScreen(chat.id)),
+  })
+
+  const unread = () =>
+    inbox
+      .picked()
+      .filter(chat => chat.unread > 0)
+      .map(chat => chat.id)
+      .sort()
+  const markRead = async (ids: readonly string[]) => {
+    await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+  }
+
+  const readAll = action<readonly string[]>({
+    id: 'read-all',
+    say: 'Mark all read',
+    hint: 'Marks every chat on the list as read',
+    risk: 'voice',
+    blocked: () => (unread().length ? null : WORDS.nothingUnread),
+    targets: () => {
+      const ids = unread()
+      return [{ id: ids.join(' '), say: WORDS.listedChats, value: ids }]
+    },
+    choose: () =>
+      void markRead(unread()).then(redraw, error => {
+        if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notRead)
+      }),
+    run: markRead,
   })
 
   const router: Router = new Router({
@@ -317,16 +397,38 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       context: () => 'The list of chats',
       view: () => list({ title: WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
     },
-    actions: () => [open],
+    actions: () => [open, message, readAll],
   })
 
-  const dictate: Agent = heard => {
-    const chat = held
-    const words = heard.words.trim()
-    if (chat === null || !words || (onDraft ?? onReplies ?? onChat) !== chat) return { kind: 'notMine' }
-    if (onDraft === chat || onReplies === chat) router.replace(draftScreen(chat, words))
-    else router.open(draftScreen(chat, words))
+  const choose: Agent = heard => {
+    const offered = held && router.current === held ? choices.get(held) : undefined
+    if (!offered) return { kind: 'notMine' }
+    const { matches } = findNamed(heard.words, offered())
+    if (matches.length !== 1) return { kind: 'handled', say: WORDS.noSuchChat }
+    router.jump(chatScreen(matches[0].id))
     return { kind: 'handled' }
+  }
+
+  const dictate: Agent = heard => {
+    const on = held && router.current === held ? chatOn.get(held) : undefined
+    const words = showable(heard.words)
+    if (!on || !words) return { kind: 'notMine' }
+    if (on.covers) router.replace(draftScreen(on.chat, words))
+    else router.open(draftScreen(on.chat, words))
+    return { kind: 'handled' }
+  }
+
+  const asked = hearing?.model ?? matchWords
+  const model: NavigatorModel = {
+    choose: (question, turn) => {
+      const command = commandOf(question.words)
+      const offered = question.options.filter(option => option.role === undefined)
+      if (!command || offered.some(option => sameWords(option.say, question.words))) return asked.choose(question, turn)
+      const meant = command === 'message' ? message : open
+      const replying = chatOn.has(router.current) && addressed(question.words, inbox.picked()).matches.length === 0
+      const option = replying ? question.options.find(passed => passed.role === 'pass') : offered.find(one => one.say === meant.say)
+      return option ? Promise.resolve({ [option.id]: 1 }) : asked.choose(question, turn)
+    },
   }
 
   const shell: Shell = new Shell(
@@ -336,12 +438,23 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     hearing
       ? {
           voice: {
-            transcribe: hearing.transcribe,
-            ...(hearing.model ? { model: hearing.model } : {}),
-            agents: [dictate],
-            otherwise: 'A reply to send to the chat on screen',
+            transcribe: async (audio, turn) => {
+              const words = await turn.guard(hearing.transcribe(audio, turn))
+              const mine = words ? { words } : null
+              said = mine
+              turn.own(() => {
+                void Promise.resolve().then(() => {
+                  if (said === mine) said = null
+                })
+              })
+              return words
+            },
+            model,
+            agents: [choose, dictate],
+            otherwise: 'A reply to send to the chat on screen, or the name of a chat to choose',
             onListen: () => {
-              held = onDraft ?? onReplies ?? onChat
+              said = null
+              held = router.current
             },
           },
         }

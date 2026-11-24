@@ -1,4 +1,4 @@
-import { createStore, Glasses, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech } from 'earshot'
+import { createStore, Glasses, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech, type NavigatorModel, type Question } from 'earshot'
 import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoMessenger } from '../demo/messenger.ts'
@@ -9,7 +9,7 @@ import { startGlasses } from './app.ts'
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
 const tone = (ms: number) => new Uint8Array(new Int16Array((ms / 1000) * SAMPLE_RATE).map((_, at) => 8_000 * Math.sin(at / 5)).buffer)
 
-async function world(picks: string[], said: string[] = [], own: string[] = []) {
+async function world(picks: string[], said: string[] = [], own: string[] = [], model?: NavigatorModel) {
   const life = new Lifetime()
   const fake = fakeBridge()
   const store = createStore([memoryPlace()])
@@ -29,7 +29,7 @@ async function world(picks: string[], said: string[] = [], own: string[] = []) {
     inbox,
     messenger,
     phrases,
-    hearing: { transcribe: scriptedSpeech(said) },
+    hearing: { transcribe: scriptedSpeech(said), ...(model ? { model } : {}) },
   })
   await settle()
   const say = async () => {
@@ -185,6 +185,13 @@ describe('a reply said aloud', () => {
     await say()
     expect(fake.lines()).toEqual(['To Anna', 'tomorrow would be better', 'Tap to send'])
     expect(router.depth).toBe(3)
+  })
+
+  it('is not started by words the glasses cannot show at all', async () => {
+    const { say, router, openFirst } = await world(['anna'], ['\u200b'])
+    await openFirst()
+    await say()
+    expect(router.current.id).toBe('chat:anna')
   })
 
   it('is not started by words said on the list, where no chat is on screen', async () => {
@@ -371,5 +378,235 @@ describe('undo', () => {
     w.fake.tap()
     await settle()
     expect(await w.texts('anna')).not.toContain('see you at twelve thirty')
+  })
+})
+
+describe('by voice, from any screen', () => {
+  it('S1, G5: offers a model nothing read from Telegram and none of the user’s phrases', async () => {
+    const asked: Question[] = []
+    const model: NavigatorModel = {
+      choose: async question => {
+        asked.push(question)
+        return {}
+      },
+    }
+    const { say, openFirst } = await world(
+      ['anna', 'launch', 'sam'],
+      ['what is new', 'anything else'],
+      ['In a meeting, back at three'],
+      model,
+    )
+    await say()
+    await openFirst()
+    await say()
+    expect(asked).toHaveLength(2)
+    const offered = JSON.stringify(asked).toLowerCase()
+    for (const kept of ['anna', 'launch', 'crew', 'sam', '12:30', 'usual place', 'lunch', 'in a meeting'])
+      expect(offered).not.toContain(kept)
+    expect(offered).toContain('open chat')
+  })
+
+  it('opens a chat said by name, the name matched on the phone', async () => {
+    const { say, router } = await world(['anna', 'launch', 'sam'], ['open launch crew'])
+    await say()
+    expect(router.current.id).toBe('chat:launch')
+    expect(router.depth).toBe(2)
+  })
+
+  it('opens the named chat from inside another one, with only the list behind it', async () => {
+    const { say, router, openFirst } = await world(['anna', 'launch', 'sam'], ['open launch crew'])
+    await openFirst()
+    await say()
+    expect(router.current.id).toBe('chat:launch')
+    expect(router.depth).toBe(2)
+  })
+
+  it('asks which chat when no picked chat was named', async () => {
+    const { fake, say, router } = await world(['anna', 'sam'], ['open the chat'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['Which chat?', '> Anna (2)', 'Sam'])
+    fake.down()
+    fake.tap()
+    await settle()
+    expect(router.current.id).toBe('chat:sam')
+    expect(router.depth).toBe(2)
+  })
+
+  it('S5: starts a message to a chat said by name with the words after the name, and sends it only by a tap', async () => {
+    const { fake, say, sent, router } = await world(['anna', 'sam'], ['message Sam the demo moved to four'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Sam', 'the demo moved to four', 'Tap to send'])
+    expect(sent()).toEqual([])
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['sam', 'the demo moved to four']])
+    expect(router.current.id).toBe('chat:sam')
+    expect(fake.lines().at(-1)).toBe('Sent. Tap to undo')
+  })
+
+  it('opens the chat, ready for a hold, when a name is said with no message', async () => {
+    const { say, router, sent } = await world(['anna', 'sam'], ['message Sam'])
+    await say()
+    expect(router.current.id).toBe('chat:sam')
+    expect(sent()).toEqual([])
+  })
+
+  it('never writes to a chat that was not picked, also when it is named', async () => {
+    const { fake, say, sent } = await world(['anna'], ['message Sam the demo moved to four'])
+    await say()
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(sent()).toEqual([])
+  })
+
+  it('S5: marks every picked chat read only after a tap, when it was said', async () => {
+    const { fake, say, unread } = await world(['anna', 'launch'], ['mark all read'])
+    await say()
+    expect(await unread('anna')).toBe(2)
+    expect(fake.overlay()).toContain('Tap to confirm')
+    fake.tap()
+    await settle()
+    expect([await unread('anna'), await unread('launch')]).toEqual([0, 0])
+    expect(fake.lines()).toEqual(['Paper Plane', '> Anna', 'Launch crew'])
+  })
+
+  it('A5: does not use what was said in an earlier hold for a touch that follows at once', async () => {
+    const { fake, say, router } = await world(['anna', 'sam'], ['Sam'])
+    await say()
+    expect(router.depth).toBe(1)
+    fake.pick('Message someone')
+    await settle()
+    expect(router.current.id).toBe('pick-chat')
+  })
+
+  it('A5: does not aim a reply dictated in one chat at another chat named in it', async () => {
+    const { fake, say, router, sent, openFirst } = await world(['anna', 'sam'], ['Sam must not see this'])
+    await openFirst()
+    await say()
+    expect(fake.lines().slice(0, 2)).toEqual(['To Anna', 'Sam must not see this'])
+    fake.double()
+    await settle()
+    fake.pick('Message someone')
+    await settle()
+    expect(router.current.id).toBe('pick-chat')
+    expect(sent()).toEqual([])
+  })
+
+  it('A5: takes a name said at "Which chat?" as the choice, never as a message to the chat underneath', async () => {
+    const { fake, say, router, sent, openFirst } = await world(['anna', 'sam'], ['message someone', 'Sam'])
+    await openFirst()
+    await say()
+    expect(router.current.id).toBe('pick-chat')
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('chat:sam')
+    expect(router.depth).toBe(2)
+    expect(fake.lines()[0]).toBe('Sam')
+    expect(sent()).toEqual([])
+  })
+
+  it('A5: stays at "Which chat?" when what is said names no picked chat', async () => {
+    const { fake, say, router, sent, openFirst } = await world(['anna', 'sam'], ['message someone', 'Robert tomorrow'])
+    await openFirst()
+    await say()
+    await say()
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.overlay()).toContain('No chat by that name')
+    await settle(5_000)
+    expect(fake.lines()).toEqual(['Which chat?', '> Anna', 'Sam'])
+    expect(sent()).toEqual([])
+  })
+
+  it('takes "message <chat>" as a message whatever follows, also words that are commands on their own', async () => {
+    const { fake, say, sent } = await world(['anna', 'sam'], ['message Sam I will go back tomorrow'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Sam', 'I will go back tomorrow', 'Tap to send'])
+    expect(sent()).toEqual([])
+  })
+
+  it('S1: asks no model at all when the command names its chat', async () => {
+    let asked = 0
+    const model: NavigatorModel = {
+      choose: async () => {
+        asked++
+        return {}
+      },
+    }
+    const { say, router } = await world(['anna', 'launch'], ['open launch crew'], [], model)
+    await say()
+    expect(router.current.id).toBe('chat:launch')
+    expect(asked).toBe(0)
+  })
+
+  it('A5: marks read only the chats that were unread and picked when it was said', async () => {
+    const { fake, say, unread, inbox } = await world(['anna'], ['mark all read'])
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    await inbox.pick(['launch'])
+    fake.tap()
+    await settle()
+    expect([await unread('anna'), await unread('launch')]).toEqual([2, 1])
+  })
+
+  it('marks every picked chat read at once when it is chosen by touch', async () => {
+    const { fake, unread } = await world(['anna', 'launch'])
+    fake.pick('Mark all read')
+    await settle()
+    expect([await unread('anna'), await unread('launch')]).toEqual([0, 0])
+  })
+
+  it('asks which chat when the one named after "message" is not picked, whatever names follow', async () => {
+    const { fake, say, router, sent } = await world(['anna', 'sam'], ['message Robert ask Sam about lunch'])
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(sent()).toEqual([])
+  })
+
+  it('A4: says nothing on glasses that are gone when the app ends while chats are being marked read', async () => {
+    const w = await world(['anna', 'launch'])
+    let fail = (_: Error) => {}
+    w.messenger.read = () => new Promise<void>((_, reject) => (fail = reject))
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.fake.pick('Mark all read')
+    await settle()
+    w.life.end()
+    fail(new Error('offline'))
+    await settle()
+    expect(noticed).not.toHaveBeenCalled()
+  })
+
+  it('opens the chat, with no reply started, when only a full stop follows the name', async () => {
+    const { say, router } = await world(['anna', 'sam'], ['Message Sam.'])
+    await say()
+    expect(router.current.id).toBe('chat:sam')
+  })
+
+  it('asks which chat, and does nothing else, when "message" on the list is followed by a chat that is not picked and by command words', async () => {
+    const { fake, say, router, sent } = await world(['anna', 'sam'], ['message Robert I will go back tomorrow'])
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(sent()).toEqual([])
+  })
+
+  it('keeps such a sentence as the reply when a chat is open, where replies often start with "tell" or "open"', async () => {
+    const { fake, say, router, sent, openFirst } = await world(
+      ['anna', 'sam'],
+      ['message Robert I will go back tomorrow', 'tell me when you arrive'],
+    )
+    await openFirst()
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Anna', 'message Robert I will go back tomorrow', 'Tap to send'])
+    await say()
+    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Anna', 'tell me when you arrive', 'Tap to send'])
+    expect(router.depth).toBe(3)
+    expect(sent()).toEqual([])
   })
 })
