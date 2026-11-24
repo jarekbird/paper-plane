@@ -53,6 +53,7 @@ const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
   title: 'Paper Plane',
   whichChat: 'Which chat?',
+  noSuchChat: 'No chat by that name',
   nothingUnread: 'Nothing is unread',
   noChats: 'Pick your chats on the phone',
   loading: 'Loading…',
@@ -103,10 +104,9 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
 export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesParts): GlassesApp {
   const { inbox, messenger, phrases, hearing } = parts
   const sentIn = new Map<string, (message: Message) => void>()
-  let onChat: string | null = null
-  let onReplies: string | null = null
-  let onDraft: string | null = null
-  let held: string | null = null
+  const chatOn = new WeakMap<Screen, { chat: string; covers: boolean }>()
+  const choices = new WeakMap<Screen, () => Chat[]>()
+  let held: Screen | null = null
   let said: { words: string } | null = null
 
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
@@ -152,28 +152,23 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
-        onDraft = id
-        entered.own(() => {
-          if (onDraft === id) onDraft = null
-        })
       },
       view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
     }
+    chatOn.set(self, { chat: id, covers: true })
     return self
   }
 
-  const repliesScreen = (id: string, reply: Action): Screen => ({
-    id: `replies:${id}`,
-    actions: () => [reply],
-    context: () => 'Short answers to choose from',
-    enter: entered => {
-      onReplies = id
-      entered.own(() => {
-        if (onReplies === id) onReplies = null
-      })
-    },
-    view: () => list({ title: `To ${titleOf(id)}`, action: reply }),
-  })
+  const repliesScreen = (id: string, reply: Action): Screen => {
+    const self: Screen = {
+      id: `replies:${id}`,
+      actions: () => [reply],
+      context: () => 'Short answers to choose from',
+      view: () => list({ title: `To ${titleOf(id)}`, action: reply }),
+    }
+    chatOn.set(self, { chat: id, covers: true })
+    return self
+  }
 
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
@@ -281,16 +276,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
-    return {
+    const self: Screen = {
       id: `chat:${id}`,
       actions: () => [reply, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
-        onChat = id
         sentIn.set(id, sent)
         entered.own(() => {
-          if (onChat === id) onChat = null
           if (sentIn.get(id) === sent) sentIn.delete(id)
         })
         entered.own(
@@ -305,6 +298,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
         }),
     }
+    chatOn.set(self, { chat: id, covers: false })
+    return self
   }
 
   const chatTargets = (chats: readonly Chat[]) => chats.map(chat => ({ id: chat.id, say: label(chat), value: chat, private: true }))
@@ -316,14 +311,21 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   }
 
   const pick = (among: readonly Chat[]) => {
+    const offered = () => (among.length ? inbox.picked().filter(chat => among.some(wanted => wanted.id === chat.id)) : inbox.picked())
     const one = action<Chat>({
       id: 'open-one',
       say: 'Open chat',
-      targets: () =>
-        chatTargets(among.length ? inbox.picked().filter(chat => among.some(wanted => wanted.id === chat.id)) : inbox.picked()),
+      targets: () => chatTargets(offered()),
       run: chat => router.jump(chatScreen(chat.id)),
     })
-    router.open({ id: 'pick-chat', actions: () => [one], view: () => list({ title: WORDS.whichChat, action: one, empty: WORDS.noChats }) })
+    const picker: Screen = {
+      id: 'pick-chat',
+      actions: () => [one],
+      context: () => 'A list of chats to choose one from',
+      view: () => list({ title: WORDS.whichChat, action: one, empty: WORDS.noChats }),
+    }
+    choices.set(picker, offered)
+    router.open(picker)
   }
 
   const open: Action = action<Chat>({
@@ -374,12 +376,21 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     actions: () => [open, message, readAll],
   })
 
+  const choose: Agent = heard => {
+    const offered = held && router.current === held ? choices.get(held) : undefined
+    if (!offered) return { kind: 'notMine' }
+    const { matches } = findNamed(heard.words, offered())
+    if (matches.length !== 1) return { kind: 'handled', say: WORDS.noSuchChat }
+    router.jump(chatScreen(matches[0].id))
+    return { kind: 'handled' }
+  }
+
   const dictate: Agent = heard => {
-    const chat = held
+    const on = held && router.current === held ? chatOn.get(held) : undefined
     const words = heard.words.trim()
-    if (chat === null || !words || (onDraft ?? onReplies ?? onChat) !== chat) return { kind: 'notMine' }
-    if (onDraft === chat || onReplies === chat) router.replace(draftScreen(chat, words))
-    else router.open(draftScreen(chat, words))
+    if (!on || !words) return { kind: 'notMine' }
+    if (on.covers) router.replace(draftScreen(on.chat, words))
+    else router.open(draftScreen(on.chat, words))
     return { kind: 'handled' }
   }
 
@@ -402,11 +413,11 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
               return words
             },
             ...(hearing.model ? { model: hearing.model } : {}),
-            agents: [dictate],
-            otherwise: 'A reply to send to the chat on screen',
+            agents: [choose, dictate],
+            otherwise: 'A reply to send to the chat on screen, or the name of a chat to choose',
             onListen: () => {
               said = null
-              held = onDraft ?? onReplies ?? onChat
+              held = router.current
             },
           },
         }
