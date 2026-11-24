@@ -1,4 +1,4 @@
-import type { Store } from 'earshot'
+import { oneLine, type Store } from 'earshot'
 
 const KEY = 'phrases'
 const MOST = 12
@@ -29,7 +29,7 @@ export class Phrases {
   }
 
   add(phrase: string): Promise<void> {
-    const text = phrase.trim().replace(/\s+/g, ' ').slice(0, LONGEST)
+    const text = tidy(phrase)
     if (!text || this.#phrases.length >= MOST || this.#phrases.some(known => known.toLowerCase() === text.toLowerCase()))
       return Promise.resolve()
     return this.#save([...this.#phrases, text])
@@ -50,10 +50,17 @@ export class Phrases {
   }
 }
 
+const tidy = (phrase: string): string => oneLine(phrase).replace(/\s+/g, ' ').trim().slice(0, LONGEST)
+
 function parse(saved: string): string[] {
   try {
     const parsed: unknown = JSON.parse(saved)
-    return Array.isArray(parsed) ? parsed.filter(phrase => typeof phrase === 'string').slice(0, MOST) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(phrase => typeof phrase === 'string')
+      .map(tidy)
+      .filter(Boolean)
+      .slice(0, MOST)
   } catch {
     return []
   }

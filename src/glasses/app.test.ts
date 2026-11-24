@@ -134,6 +134,17 @@ describe('a reply said aloud', () => {
     expect(fake.lines()[1]).toBe('You: see you at twelve thirty')
   })
 
+  it('S5: is sent exactly as it was shown, without characters the glasses cannot show', async () => {
+    const { fake, say, sent, openFirst } = await world(['anna'], ['pay alice\u200b five `hundred`'])
+    await openFirst()
+    await say()
+    const shown = fake.lines()[1]
+    expect(shown).not.toContain('\u200b')
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', shown]])
+  })
+
   it('is dropped by a double tap, and nothing is sent', async () => {
     const { fake, say, router, sent, openFirst } = await world(['anna'], ['never mind this'])
     await openFirst()

@@ -108,8 +108,9 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
   const redraw = () => shell.redraw()
 
-  const draftScreen = (id: string, words: string): Screen => {
-    const lines = wrapText(cleanText(words), SCREEN_WIDTH)
+  const draftScreen = (id: string, given: string): Screen => {
+    const words = cleanText(given).trim()
+    const lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
     let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
     let screen: Lifetime | null = null

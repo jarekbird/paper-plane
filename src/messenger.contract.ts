@@ -12,7 +12,7 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
     it('lists chats newest first, each with its newest message', async () => {
       const { messenger } = await make()
       const chats = await messenger.chats()
-      const times = chats.map(chat => chat.last?.at ?? 0)
+      const times = chats.flatMap(chat => (chat.last ? [chat.last.at] : []))
       expect(chats.length).toBeGreaterThan(0)
       expect(times).toEqual([...times].sort((a, b) => b - a))
       for (const chat of chats) if (chat.last) expect(chat.last.chat).toBe(chat.id)

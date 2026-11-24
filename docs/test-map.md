@@ -66,7 +66,7 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **S2** | In part: `earshot-check` (each whitelist entry is an origin; the build names no URL outside the whitelist; `demo://local` is the app's own). That the whitelist is exactly Telegram's web sockets, the Worker and Google's APIs: no check yet. |
 | **S3** | No check yet. |
 | **S4** | No check yet. |
-| **S5** | In part: `src/glasses/app.test.ts`, "a reply said aloud" and "a short answer" (shown first, sent only by a tap; chosen by voice, asks for a tap). Reactions and calendar events: no check yet. |
+| **S5** | In part: `src/glasses/app.test.ts`, "a reply said aloud" and "a short answer" (shown first, sent only by a tap; chosen by voice, asks for a tap; a row cut short is shown in full first; the text sent is the text shown), and `src/phrases.test.ts` (a saved phrase is kept as the glasses show it). Reactions and calendar events: no check yet. |
 | **S6** | No check yet. |
 | **S7** | No check yet: `worker/` is not built. g2-messaging's relay checks (storage names in its source, its `wrangler.jsonc` read as JSONC) are the model when it is. |
 | **A1** | `plane/imports`: a service imports no `src/glasses` or `src/phone`, and from `earshot` none of `Router`, `Shell`, `Glasses`, the views or their types (`SCREENS` in `eslint.config.js`). |
@@ -74,7 +74,7 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **A3** | `plane/imports`: only `src/main.ts` imports the Even SDK. `plane/names`: the bridge's drawing, event and recording methods nowhere in `src`; its storage methods and the web view's storage only in `src/store.ts`. |
 | **A4** | `plane/names`: no `setTimeout`, `setInterval`, `requestAnimationFrame`, `requestIdleCallback` or `addEventListener` in `src`. `plane/lifetime`: a socket is opened inside `life.own(...)`, and the handle of `onChange`, `onMic`, `onInput` or `subscribe` is never dropped. A `fetch` without `life.signal`: no check yet. |
 | **A5** | In part: `plane/awaits` (reads types): in a function that owns a `Lifetime`, every `await` is `await life.guard(...)`, with no `.then()` and no lifetime read again after an await. Binding input to its target and rechecking it: no check yet (t3-g2's `recheck` rule names one controller's fields and was not ported). |
-| **A6** | In part: `tsc` holds each service to the interfaces of `src/messenger.ts`, and `src/messenger.contract.ts` is the contract, run against the demo by `src/demo/messenger.test.ts`. The same contract against `src/telegram`, and that every call has a demo counterpart: no check yet. |
+| **A6** | In part: `tsc` holds each service to the interfaces of `src/messenger.ts`, and `src/messenger.contract.ts` is the contract, run against the demo by `src/demo/messenger.test.ts`. The same contract runs against the Telegram adapter over a stand-in client that, like mtcute, tells nothing about the user's own writes (`src/telegram/messenger.test.ts`). Against Telegram itself (by hand, on Jarek's account), and that every call has a demo counterpart: no check yet. |
 | **A7** | No check yet: Earshot's `Shell` gives a screen no raw touches, but reading `glasses.onInput` is not refused. |
 | **A8** | No check yet. |
 | **C1** | No check yet: neither t3-g2 nor g2-messaging checks it by lint or script. Review. |
