@@ -7,6 +7,7 @@ export interface Message {
   text: string
   at: number
   mine: boolean
+  liked: boolean
 }
 
 export interface Chat {
@@ -23,5 +24,8 @@ export interface Messenger {
   send(chat: string, text: string): Promise<Message>
   read(chat: string): Promise<void>
   unsend(message: Message): Promise<void>
+  keep(chat: string, text: string): Promise<boolean>
+  save(message: Message): Promise<void>
+  like(message: Message): Promise<void>
   onChange(told: () => void): () => void
 }

@@ -121,6 +121,9 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     send: messenger.send,
     read: messenger.read,
     unsend: messenger.unsend,
+    keep: messenger.keep,
+    save: messenger.save,
+    like: messenger.like,
     onChange: messenger.onChange,
   }
 }

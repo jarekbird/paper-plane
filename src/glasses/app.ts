@@ -50,6 +50,7 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+const LIKED = '👍'
 // Earshot's list view keeps 20 px left of its rows for the cursor.
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
@@ -67,6 +68,17 @@ const WORDS = {
   tapToSend: 'Tap to send',
   sending: 'Sending…',
   sent: 'Sent',
+  keeping: 'Keeping…',
+  kept: 'Kept as a draft',
+  draftWaiting: 'Your phone already has a draft',
+  notKept: 'Could not keep it',
+  newestMessage: 'the newest message',
+  nothingFromOthers: 'No message from someone else',
+  liked: 'Liked',
+  alreadyLiked: 'Already liked',
+  notLiked: 'Could not like it',
+  saved: 'Saved',
+  notSaved: 'Could not save it',
   notSent: 'Not sent. Tap to try again',
   undo: 'Sent. Tap to undo',
   undone: 'Taken back',
@@ -83,8 +95,10 @@ const showable = (words: string) => {
 
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
 
-const line = (chat: Chat | undefined, message: Message) =>
-  message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
+const line = (chat: Chat | undefined, message: Message) => {
+  const text = message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
+  return message.liked ? `${text} ${LIKED}` : text
+}
 
 const page = (title: string, body: string, foot: string): Box[] => [
   { id: 'title', x: 0, y: 0, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: fitText(oneLine(title), SCREEN_WIDTH), brightness: DIM },
@@ -125,14 +139,24 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     const words = showable(given)
     const lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
-    let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
+    let state: 'ready' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    const busy = () =>
+      state === 'sending'
+        ? WORDS.sending
+        : state === 'sent'
+          ? WORDS.sent
+          : state === 'keeping'
+            ? WORDS.keeping
+            : state === 'kept'
+              ? WORDS.kept
+              : null
     let screen: Lifetime | null = null
 
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
-      blocked: () => (state === 'sending' ? WORDS.sending : state === 'sent' ? WORDS.sent : null),
+      blocked: busy,
       run: async () => {
         if (!screen) return
         state = 'sending'
@@ -152,12 +176,41 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         sentIn.get(id)?.(sent)
       },
     })
-    const foot = () =>
-      state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : state === 'sent' ? WORDS.sent : WORDS.tapToSend
+    const keep = action({
+      id: 'keep',
+      say: 'Keep for later',
+      hint: 'Keeps the reply as a draft in Telegram, to finish on the phone',
+      risk: 'voice',
+      blocked: busy,
+      run: async () => {
+        if (!screen) return
+        const before = state
+        state = 'keeping'
+        redraw()
+        let kept: boolean
+        try {
+          kept = await screen.guard(messenger.keep(id, words))
+        } catch (error) {
+          if (error instanceof LifetimeEnded) return
+          state = before
+          shell.notice(WORDS.notKept)
+          return
+        }
+        if (!kept) {
+          state = before
+          shell.notice(WORDS.draftWaiting)
+          return
+        }
+        state = 'kept'
+        if (router.current === self) router.back()
+        shell.notice(WORDS.kept)
+      },
+    })
+    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
 
     const self: Screen = {
       id: `draft:${id}`,
-      actions: () => [send, scroll.down, scroll.up],
+      actions: () => [send, keep, scroll.down, scroll.up],
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
@@ -248,6 +301,70 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
+    const newest = () => messages?.findLast(message => !message.mine) ?? null
+    const onNewest = (spec: {
+      id: string
+      say: string
+      hint: string
+      done: string
+      failed: string
+      refused?: (message: Message) => string | null
+      act: (message: Message) => Promise<void>
+    }) => {
+      let acting = false
+      const run = async (message: Message) => {
+        if (!screen || acting) return
+        const entered = screen
+        acting = true
+        try {
+          await entered.guard(spec.act(message))
+        } catch (error) {
+          acting = false
+          if (!(error instanceof LifetimeEnded)) shell.notice(spec.failed)
+          return
+        }
+        acting = false
+        void load(entered)
+        shell.notice(spec.done)
+      }
+      return action<Message>({
+        id: spec.id,
+        say: spec.say,
+        hint: spec.hint,
+        risk: 'voice',
+        blocked: () => {
+          const message = newest()
+          return message ? (spec.refused?.(message) ?? null) : WORDS.nothingFromOthers
+        },
+        targets: () => {
+          const message = newest()
+          return message ? [{ id: message.id, say: WORDS.newestMessage, value: message }] : []
+        },
+        choose: () => {
+          const message = newest()
+          if (message) void run(message)
+        },
+        run,
+      })
+    }
+    const like = onNewest({
+      id: 'like',
+      say: 'Like',
+      hint: 'Sends a thumbs-up to the newest message from someone else',
+      done: WORDS.liked,
+      failed: WORDS.notLiked,
+      refused: message => (message.liked ? WORDS.alreadyLiked : null),
+      act: message => messenger.like(message),
+    })
+    const save = onNewest({
+      id: 'save',
+      say: 'Save',
+      hint: 'Copies the newest message from someone else to Saved Messages',
+      done: WORDS.saved,
+      failed: WORDS.notSaved,
+      act: message => messenger.save(message),
+    })
+
     const reply: Action = action<string>({
       id: 'reply',
       say: 'Reply',
@@ -287,7 +404,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
 
     const self: Screen = {
       id: `chat:${id}`,
-      actions: () => [reply, takeBack, scroll.down, scroll.up],
+      actions: () => [reply, like, save, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
@@ -460,6 +577,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         }
       : {},
   )
+  life.own(() => router.close())
   life.own(inbox.onChange(redraw))
   life.own(phrases.onChange(redraw))
 

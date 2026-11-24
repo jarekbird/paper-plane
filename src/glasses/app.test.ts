@@ -610,3 +610,130 @@ describe('by voice, from any screen', () => {
     expect(sent()).toEqual([])
   })
 })
+
+describe('a reply kept for later', () => {
+  it('becomes the chat’s draft in Telegram, exactly as shown, and the chat comes back', async () => {
+    const { fake, say, router, sent, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+    expect(router.current.id).toBe('chat:anna')
+    expect(fake.overlay()).toContain('Kept as a draft')
+    expect(sent()).toEqual([])
+  })
+
+  it('never replaces a draft that is already waiting on the phone', async () => {
+    const { fake, say, router, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    await messenger.keep('anna', 'typed on the phone')
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('typed on the phone')
+    expect(router.current.id).toBe('draft:anna')
+    expect(fake.overlay()).toContain('Your phone already has a draft')
+  })
+
+  it('S5: asks for a tap first when keeping is said', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty', 'keep for later'])
+    await openFirst()
+    await say()
+    await say()
+    expect(messenger.drafts().size).toBe(0)
+    expect(fake.overlay()).toContain('Tap to confirm')
+    fake.tap()
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+  })
+
+  it('cannot be sent as well once it is kept', async () => {
+    const { fake, say, sent, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = messenger.keep
+    messenger.keep = async (chat, text) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text)
+    }
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    fake.tap()
+    await settle()
+    release()
+    await settle()
+    expect(sent()).toEqual([])
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+  })
+})
+
+describe('the newest message from someone else', () => {
+  const NEWEST = 'I can do 12:30 at the usual place.'
+
+  it('is liked by a pick in the menu, and shows it', async () => {
+    const { fake, texts, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Like')
+    await settle()
+    expect((await messenger.history('anna', 6)).filter(message => message.liked).map(message => message.text)).toEqual([NEWEST])
+    expect(fake.lines()[1]).toBe(`${NEWEST} 👍`)
+    expect(fake.overlay()).toContain('Liked')
+    expect(await texts('anna')).toHaveLength(3)
+  })
+
+  it('S5, A5: liked by voice, asks for a tap, and nothing is liked if a newer message arrived meanwhile', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['like that'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    fake.tap()
+    await settle()
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('is not liked twice', async () => {
+    const { fake, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Like')
+    await settle(5_000)
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('Already liked')
+  })
+
+  it('is copied to Saved Messages by a pick in the menu', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual([NEWEST])
+    expect(fake.overlay()).toContain('Saved')
+  })
+
+  it('is saved once when the menu is picked twice in a row', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Save')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toHaveLength(1)
+  })
+
+  it('A4: says nothing on glasses that are gone when the app ends while a like is on its way', async () => {
+    const w = await world(['anna'])
+    let fail = (_: Error) => {}
+    w.messenger.like = () => new Promise<void>((_, reject) => (fail = reject))
+    await w.openFirst()
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.fake.pick('Like')
+    await settle()
+    w.life.end()
+    fail(new Error('offline'))
+    await settle()
+    expect(noticed).not.toHaveBeenCalled()
+  })
+})

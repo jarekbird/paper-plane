@@ -14,6 +14,7 @@ const message = (over: Partial<MessageLike> = {}): MessageLike => ({
   chat: anna,
   sender: anna,
   media: null,
+  reactions: null,
   ...over,
 })
 
@@ -26,7 +27,21 @@ describe('what Telegram says, as the app reads it', () => {
       text: 'See you at noon',
       at: 1_700_000_000_000,
       mine: true,
+      liked: false,
     })
+  })
+
+  it('shows a message as liked only when the thumbs-up is the user’s own', () => {
+    const others = { reactions: [{ emoji: '👍', order: null }] }
+    const own = {
+      reactions: [
+        { emoji: '❤', order: 0 },
+        { emoji: '👍', order: 1 },
+      ],
+    }
+    const ownHeart = { reactions: [{ emoji: '❤', order: 0 }] }
+    const liked = [others, own, ownHeart].map(reactions => toMessage(message({ reactions })).liked)
+    expect(liked).toEqual([false, true, false])
   })
 
   it('names an attachment in words, since the glasses show text only', () => {
@@ -36,22 +51,24 @@ describe('what Telegram says, as the app reads it', () => {
   })
 
   it('tells a person from a group from a channel, which decides how a message is headed', () => {
-    const dialog = (peer: PeerLike) => toChat({ peer, unreadCount: 0, lastMessage: null }).kind
+    const dialog = (peer: PeerLike) => toChat({ peer, unreadCount: 0, lastMessage: null, draftMessage: null }).kind
     expect([dialog(anna), dialog(crew), dialog(news)]).toEqual(['person', 'group', 'channel'])
   })
 
   it('gives a group and a person different ids even when their numbers match', () => {
     const group: PeerLike = { type: 'chat', id: -42, displayName: 'Forty-two', chatType: 'group' }
-    expect(toChat({ peer: group, unreadCount: 0, lastMessage: null }).id).not.toBe(
-      toChat({ peer: anna, unreadCount: 0, lastMessage: null }).id,
+    expect(toChat({ peer: group, unreadCount: 0, lastMessage: null, draftMessage: null }).id).not.toBe(
+      toChat({ peer: anna, unreadCount: 0, lastMessage: null, draftMessage: null }).id,
     )
   })
 
   it('carries the unread count and the newest message, but not a service notice such as "Anna joined"', () => {
-    expect(toChat({ peer: crew, unreadCount: 3, lastMessage: message({ chat: crew }) })).toMatchObject({
+    expect(toChat({ peer: crew, unreadCount: 3, lastMessage: message({ chat: crew }), draftMessage: null })).toMatchObject({
       unread: 3,
       last: { text: 'See you at noon' },
     })
-    expect(toChat({ peer: crew, unreadCount: 0, lastMessage: message({ chat: crew, isService: true }) }).last).toBeNull()
+    expect(
+      toChat({ peer: crew, unreadCount: 0, lastMessage: message({ chat: crew, isService: true }), draftMessage: null }).last,
+    ).toBeNull()
   })
 })

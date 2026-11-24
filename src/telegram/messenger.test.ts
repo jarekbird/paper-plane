@@ -13,6 +13,8 @@ function fakeClient() {
   ]
   const unread = new Map<number, number>([[-1001234, 2]])
   const messages: MessageLike[] = []
+  const drafts = new Map<number, string>()
+  const forwarded: string[] = []
   const listeners = new Set<(update: { name: string }) => void>()
   const add = (chat: PeerLike, sender: PeerLike, text: string, isService = false): MessageLike => {
     const message: MessageLike = {
@@ -24,6 +26,7 @@ function fakeClient() {
       chat,
       sender,
       media: null,
+      reactions: null,
     }
     messages.push(message)
     return message
@@ -40,6 +43,7 @@ function fakeClient() {
         peer: entry,
         unreadCount: unread.get(entry.id) ?? 0,
         lastMessage: of(entry.id).at(-1) ?? null,
+        draftMessage: drafts.has(entry.id) ? { text: drafts.get(entry.id)! } : null,
       }))
       yield* dialogs.sort((a, b) => (b.lastMessage?.date.getTime() ?? 0) - (a.lastMessage?.date.getTime() ?? 0))
     },
@@ -52,16 +56,33 @@ function fakeClient() {
         if (at >= 0) messages.splice(at, 1)
       }
     },
+    getPeerDialogs: async chat => [
+      { peer: peer(chat), unreadCount: 0, lastMessage: null, draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null },
+    ],
+    saveDraft: async (chat, draft) => void drafts.set(chat, draft.message),
+    forwardMessagesById: async ({ fromChatId, messages: ids }) => {
+      for (const message of of(fromChatId)) if (ids.includes(message.id)) forwarded.push(message.text)
+    },
+    sendReaction: async ({ chatId, message: id, emoji }) => {
+      const at = messages.findIndex(message => message.chat.id === chatId && message.id === id)
+      messages[at] = { ...messages[at], reactions: { reactions: [{ emoji, order: 0 }] } }
+    },
     onUpdate: { add: listener => void listeners.add(listener), remove: listener => void listeners.delete(listener) },
   }
-  return { client, peers, add, listening: () => listeners.size, emit: (name: string) => listeners.forEach(listener => listener({ name })) }
+  return {
+    client,
+    peers,
+    add,
+    forwarded,
+    listening: () => listeners.size,
+    emit: (name: string) => listeners.forEach(listener => listener({ name })),
+  }
 }
 
-messengerContract('the Telegram adapter, over a client that tells nothing about the user’s own writes', async () => ({
-  messenger: messengerOver(fakeClient().client),
-  chat: '42',
-  unreadChat: '-1001234',
-}))
+messengerContract('the Telegram adapter, over a client that tells nothing about the user’s own writes', async () => {
+  const fake = fakeClient()
+  return { messenger: messengerOver(fake.client), chat: '42', unreadChat: '-1001234', saved: async () => fake.forwarded }
+})
 
 describe('the Telegram adapter', () => {
   it('tells listeners when Telegram reports a message, an edit, a deletion or a read, and nothing else', () => {

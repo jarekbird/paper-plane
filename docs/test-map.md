@@ -66,7 +66,7 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **S2** | In part: `earshot-check` (each whitelist entry is an origin; the build names no URL outside the whitelist; `demo://local` is the app's own). That the whitelist is exactly Telegram's web sockets, the Worker and Google's APIs: no check yet. |
 | **S3** | No check yet. |
 | **S4** | No check yet. |
-| **S5** | In part: `src/glasses/app.test.ts`, "a reply said aloud" and "a short answer" (shown first, sent only by a tap; chosen by voice, asks for a tap; a row cut short is shown in full first; the text sent is the text shown), and `src/phrases.test.ts` (a saved phrase is kept as the glasses show it). Reactions and calendar events: no check yet. |
+| **S5** | In part: `src/glasses/app.test.ts`, "a reply said aloud" and "a short answer" (shown first, sent only by a tap; chosen by voice, asks for a tap; a row cut short is shown in full first; the text sent is the text shown), and `src/phrases.test.ts` (a saved phrase is kept as the glasses show it). Also there: "a reply kept for later" and "the newest message from someone else" (keeping, liking and saving ask for a tap when said, and a like chosen for one message never lands on a newer one). Calendar events: no check yet. |
 | **S6** | No check yet. |
 | **S7** | No check yet: `worker/` is not built. g2-messaging's relay checks (storage names in its source, its `wrangler.jsonc` read as JSONC) are the model when it is. |
 | **A1** | `plane/imports`: a service imports no `src/glasses` or `src/phone`, and from `earshot` none of `Router`, `Shell`, `Glasses`, the views or their types (`SCREENS` in `eslint.config.js`). |

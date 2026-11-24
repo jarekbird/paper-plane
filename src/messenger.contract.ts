@@ -5,6 +5,7 @@ export interface ContractWorld {
   messenger: Messenger
   chat: string
   unreadChat: string
+  saved(): Promise<string[]>
 }
 
 export function messengerContract(name: string, make: () => Promise<ContractWorld>): void {
@@ -53,6 +54,31 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       const stop = messenger.onChange(() => told++)
       await messenger.unsend(sent)
       expect((await messenger.history(chat, 1))[0]?.id).toBe(before)
+      expect(told).toBeGreaterThan(0)
+      stop()
+    })
+
+    it('keeps a reply as the chat’s draft, but never over a draft that is already waiting', async () => {
+      const { messenger, chat } = await make()
+      expect(await messenger.keep(chat, 'See you at noon')).toBe(true)
+      expect(await messenger.keep(chat, 'Something else')).toBe(false)
+    })
+
+    it('copies a message to Saved Messages', async () => {
+      const { messenger, unreadChat, saved } = await make()
+      const newest = (await messenger.history(unreadChat, 3)).at(-1)!
+      await messenger.save(newest)
+      expect(await saved()).toEqual([newest.text])
+    })
+
+    it('likes a message, shows it as liked from then on, and tells listeners', async () => {
+      const { messenger, unreadChat } = await make()
+      const newest = (await messenger.history(unreadChat, 3)).at(-1)!
+      expect(newest.liked).toBe(false)
+      let told = 0
+      const stop = messenger.onChange(() => told++)
+      await messenger.like(newest)
+      expect((await messenger.history(unreadChat, 3)).at(-1)).toMatchObject({ id: newest.id, liked: true })
       expect(told).toBeGreaterThan(0)
       stop()
     })
