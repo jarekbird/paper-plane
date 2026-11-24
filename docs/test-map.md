@@ -60,9 +60,9 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **G2** | No check yet: for review. |
 | **G3** | `scripts/architecture.mjs`: `AGENTS.md` and `.agents/skills` are links to `CLAUDE.md` and `.claude/skills`, every skill `CLAUDE.md` names exists, every rule has a row here, and every ID a lint rule cites is a rule. |
 | **G4** | No check yet: Earshot is pinned in `package.json`; that nothing here patches it is for review. |
-| **G5** | No check yet: no model is called yet. When `src/voice` exists, a test of the exact request it sends. |
+| **G5** | In part, as S1: the question a model would get holds nothing read from Telegram. When `src/voice` exists, a test of the exact request it sends. |
 | **G6** | No check yet: channels are not built. |
-| **S1** | In part, as A2: only `src/telegram` imports `@mtcute/*` (`plane/imports`). What leaves for the Worker: no check yet, review's Security and privacy focus. |
+| **S1** | In part: only `src/telegram` imports `@mtcute/*` (`plane/imports`), and `src/glasses/app.test.ts`, "by voice, from any screen": a model that records its question is offered no chat title, message text or saved phrase. What the Worker is sent: no check yet (there is no Worker). |
 | **S2** | In part: `earshot-check` (each whitelist entry is an origin; the build names no URL outside the whitelist; `demo://local` is the app's own). That the whitelist is exactly Telegram's web sockets, the Worker and Google's APIs: no check yet. |
 | **S3** | No check yet. |
 | **S4** | No check yet. |

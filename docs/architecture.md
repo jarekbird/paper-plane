@@ -75,6 +75,7 @@ flowchart LR
   src_main_ts["src/main.ts"]
   src_messenger_contract_ts["src/messenger.contract.ts"]
   src_messenger_ts["src/messenger.ts"]
+  src_names_ts["src/names.ts"]
   src_phone["src/phone"]
   src_phrases_ts["src/phrases.ts"]
   src_replies_ts["src/replies.ts"]
@@ -84,6 +85,7 @@ flowchart LR
   src_glasses --> earshot
   src_glasses --> src_inbox_ts
   src_glasses --> src_messenger_ts
+  src_glasses --> src_names_ts
   src_glasses --> src_phrases_ts
   src_glasses --> src_replies_ts
   src_inbox_ts --> earshot
