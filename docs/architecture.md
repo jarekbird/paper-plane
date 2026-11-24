@@ -27,7 +27,7 @@ flowchart TB
   tg["Telegram's servers"]
   gapi["Google's APIs"]
   subgraph ours["Developer's Cloudflare account"]
-    worker["Worker · worker/<br>voice, drafts, Google sign-in"]
+    worker["Worker · worker/<br>voice, Google sign-in"]
   end
   openrouter["OpenRouter"]
 
@@ -43,14 +43,14 @@ flowchart TB
   store -- "storage (A3)" --> bridge
   bridge <--> device
   telegram -- "session, chats, messages (S1)" --> tg
-  google -- "calendar, mail" --> gapi
+  google -- "calendar" --> gapi
   google -- "sign-in, picked up once (S7)" --> worker
-  voice -- "the sound of a hold; the picked chats' titles with the words heard; one chat's recent messages for a draft (S1)" --> worker
+  voice -- "the sound of a hold and the words heard in it, nothing read from Telegram (S1, G5)" --> worker
   worker --> openrouter
   worker -- "sign-in" --> gapi
 ```
 
-Three things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
+Two things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
 live only on the Worker (S3), which stores nothing but a Google sign-in on its way to the phone (S7).
 
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
