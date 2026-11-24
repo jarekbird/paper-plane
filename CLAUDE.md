@@ -1,9 +1,9 @@
 # Paper Plane
 
-Telegram on Even G2 glasses, with Google Calendar and Gmail in the same flow: the chats you pick at a glance, answered
-by voice. An Even Hub app (`src/`, TypeScript) on [Earshot](https://github.com/jarekbird/earshot), and one Cloudflare
-Worker (`worker/`) for voice, drafts and Google sign-in. Entry for the Heads Up hackathon; its terms are in
-`docs/hackathon.md`. `AGENTS.md` links here; skills are in `.claude/skills` (`.agents/skills` for Codex).
+Telegram on Even G2 glasses, with Google Calendar in the same flow: the chats you pick at a glance, answered by
+voice. An Even Hub app (`src/`, TypeScript) on [Earshot](https://github.com/jarekbird/earshot), and one Cloudflare
+Worker (`worker/`) for voice and Google sign-in. Entry for the Heads Up hackathon; its terms are in
+`docs/hackathon.md`, the features in `docs/roadmap.md`. `AGENTS.md` links here; skills are in `.claude/skills` (`.agents/skills` for Codex).
 
 Rules here, as in t3-g2 and g2-messaging (Jarek): "as few tokens as possible while preserving clarity"; "top down
 architecture limitations we want to enforce to keep the application code healthy, not something that documents
@@ -19,23 +19,25 @@ which rule has which check. A rule with no check yet says so there.
 - **G3** Same framework as the other apps: "I want to have the same implementation rules and checks that T3 Glasses
   and G2 Messaging applications have." This file, the skills and the checks are it.
 - **G4** Built on Earshot. A need every voice app has goes into Earshot, by its own process; this repo never patches it.
+- **G5** AI works on the user's words only ("Your words only"): what the user says may be turned into a message.
+  Nothing read from Telegram is given to a model (Telegram API terms, 1.5).
+- **G6** Channels are in, each post list followed by Telegram's sponsored message, as its API terms (3.3) require.
 
 ## Security rules
 
 - **S1** Telegram talks to the phone only: the session, chats and messages go between `src/telegram` and Telegram's
-  servers, never through a server of ours. Three things leave for the Worker, and nothing else: the sound of a hold,
-  the titles of the picked chats with the words heard (to find where the user wants to go), and one chat's recent
-  messages when the user asks for a draft.
+  servers, never through a server of ours. Two things leave for the Worker, and nothing else: the sound of a hold and
+  the words heard in it. No message text and no name of a chat or a person read from Telegram goes to the Worker or
+  to a model; a chat said by name is matched on the phone.
 - **S2** The network whitelist in `app.json` is exactly Telegram's web sockets, the Worker and Google's APIs. The
   bundle names no other URL.
 - **S3** No key in the repo or the bundle: the OpenRouter key and Google's client secret live only on the Worker.
   Telegram's app id is injected at pack time and never committed.
 - **S4** No log, error message or report on any side contains message text, names, numbers, addresses, audio,
   transcripts, tokens or keys.
-- **S5** Nothing is written on the model's word alone. A message, an email or a calendar event is sent only after the
+- **S5** Nothing is written on the model's word alone. A message, a reaction or a calendar event is sent only after the
   glasses showed its exact text and where it goes, and the user confirmed by touch.
-- **S6** Message and email text is untrusted: shown as plain text only, never parsed as a command, and given to a
-  model only as data to answer, never as instructions.
+- **S6** Message text is untrusted: shown as plain text only, and never parsed as a command.
 - **S7** The Worker stores nothing but a Google sign-in on its way to the phone: one entry, used once, gone in five
   minutes. No messages, no audio, no logs of content.
 

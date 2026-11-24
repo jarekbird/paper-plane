@@ -60,6 +60,8 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **G2** | No check yet: for review. |
 | **G3** | `scripts/architecture.mjs`: `AGENTS.md` and `.agents/skills` are links to `CLAUDE.md` and `.claude/skills`, every skill `CLAUDE.md` names exists, every rule has a row here, and every ID a lint rule cites is a rule. |
 | **G4** | No check yet: Earshot is pinned in `package.json`; that nothing here patches it is for review. |
+| **G5** | No check yet: no model is called yet. When `src/voice` exists, a test of the exact request it sends. |
+| **G6** | No check yet: channels are not built. |
 | **S1** | In part, as A2: only `src/telegram` imports `@mtcute/*` (`plane/imports`). What leaves for the Worker: no check yet, review's Security and privacy focus. |
 | **S2** | In part: `earshot-check` (each whitelist entry is an origin; the build names no URL outside the whitelist; `demo://local` is the app's own). That the whitelist is exactly Telegram's web sockets, the Worker and Google's APIs: no check yet. |
 | **S3** | No check yet. |

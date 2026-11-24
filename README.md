@@ -4,8 +4,8 @@ Telegram on [Even Realities G2](https://www.evenrealities.com) glasses: the chat
 voice. Hold the touchpad, say the reply, read it back on the glasses, tap to send.
 
 Built for the **Heads Up** hackathon (Even Realities × TVM Ventures × Daos Hub), 23–29 November 2026.
-Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (Google Calendar, Gmail, drafts through
-OpenRouter), in one flow.
+Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (Google Calendar, and OpenRouter to turn what
+you say into a message), in one flow.
 
 ## What it does
 
@@ -14,19 +14,18 @@ OpenRouter), in one flow.
 | Your picked chats, with what is new  | You choose the chats on the phone; nothing else reaches the glasses |
 | The newest message of a chat         | Tap a chat                                                         |
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
-| A reply written for you              | Menu > Draft a reply, check it, tap to send                        |
-| Anything else by voice               | Hold and say it: "open launch crew", "go back", "draft a reply"    |
+| Anything else by voice               | Hold and say it: "open launch crew", "go back"                     |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
-sends it.
+sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds.
 
 ### State
 
 This is a build in progress, during the hackathon week.
 
 - **Works today:** the glasses screens and the voice flow above, against a built-in sample account, in the simulator.
-- **Next:** signing in to your own Telegram account from the phone, AI drafts, then Google Calendar ("put this on my
-  calendar") and Gmail.
+- **Next:** signing in to your own Telegram account from the phone, then the list in
+  [docs/roadmap.md](docs/roadmap.md).
 
 ## Run it
 
