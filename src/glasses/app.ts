@@ -47,6 +47,8 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+// Earshot's list view keeps 20 px left of its rows for the cursor.
+const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
   title: 'Paper Plane',
   noChats: 'Pick your chats on the phone',
@@ -56,6 +58,7 @@ const WORDS = {
   tapToReply: 'Tap to reply',
   tapToSend: 'Tap to send',
   sending: 'Sending…',
+  sent: 'Sent',
   notSent: 'Not sent. Tap to try again',
   undo: 'Sent. Tap to undo',
   undone: 'Taken back',
@@ -108,14 +111,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const draftScreen = (id: string, words: string): Screen => {
     const lines = wrapText(cleanText(words), SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
-    let state: 'ready' | 'sending' | 'failed' = 'ready'
+    let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
     let screen: Lifetime | null = null
 
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
-      blocked: () => (state === 'sending' ? WORDS.sending : null),
+      blocked: () => (state === 'sending' ? WORDS.sending : state === 'sent' ? WORDS.sent : null),
       run: async () => {
         if (!screen) return
         state = 'sending'
@@ -129,13 +132,16 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           redraw()
           return
         }
-        router.back()
+        state = 'sent'
+        if (router.current === self) router.back()
+        else redraw()
         sentIn.get(id)?.(sent)
       },
     })
-    const foot = () => (state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
+    const foot = () =>
+      state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : state === 'sent' ? WORDS.sent : WORDS.tapToSend
 
-    return {
+    const self: Screen = {
       id: `draft:${id}`,
       actions: () => [send, scroll.down, scroll.up],
       context: () => 'A reply, not sent yet',
@@ -148,6 +154,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
       view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
     }
+    return self
   }
 
   const repliesScreen = (id: string, reply: Action): Screen => ({
@@ -170,6 +177,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
+    let answers: Screen | null = null
 
     const lines = (): readonly string[] => {
       if (failed) return [WORDS.noLoad]
@@ -242,9 +250,17 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         const newest = messages?.findLast(message => !message.mine)?.text ?? null
         return quickReplies(newest, phrases.list()).map(text => ({ id: text, say: text, value: text, private: own.has(text) }))
       },
-      choose: () => router.open(repliesScreen(id, reply)),
+      choose: () => {
+        answers = repliesScreen(id, reply)
+        router.open(answers)
+      },
       run: async text => {
         if (!screen) return
+        if (fitText(oneLine(text), ROW_WIDTH) !== text) {
+          if (router.current === answers) router.replace(draftScreen(id, text))
+          else router.open(draftScreen(id, text))
+          return
+        }
         sending = true
         let message: Message
         try {
@@ -255,7 +271,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           return
         }
         sending = false
-        if (onReplies === id) router.back()
+        if (router.current === answers) router.back()
         sent(message)
       },
     })

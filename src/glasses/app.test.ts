@@ -19,6 +19,12 @@ async function world(picks: string[], said: string[] = [], own: string[] = []) {
   await inbox.pick(picks)
   const phrases = new Phrases(store)
   for (const phrase of own) await phrases.add(phrase)
+  const gate: { wait: Promise<void> | null } = { wait: null }
+  const send = messenger.send
+  messenger.send = async (chat, text) => {
+    await gate.wait
+    return send(chat, text)
+  }
   const app = startGlasses(life, new Glasses(life, fake.bridge), {
     inbox,
     messenger,
@@ -41,7 +47,7 @@ async function world(picks: string[], said: string[] = [], own: string[] = []) {
   const unread = async (id: string) => (await messenger.chats()).find(chat => chat.id === id)?.unread
   const texts = async (id: string) => (await messenger.history(id, 10)).map(message => message.text)
   const sent = () => messenger.sent().map(message => [message.chat, message.text])
-  return { ...app, life, fake, messenger, inbox, phrases, say, openFirst, unread, texts, sent }
+  return { ...app, life, fake, messenger, inbox, phrases, say, openFirst, unread, texts, sent, gate }
 }
 
 beforeEach(() => void vi.useFakeTimers())
@@ -233,6 +239,83 @@ describe('a short answer', () => {
       ['On my way', false],
       ['In a meeting, back at three', true],
     ])
+  })
+})
+
+describe('a short answer too long for its row', () => {
+  const LONG = 'I can help with the launch and will be there for the rehearsal, but cannot attend the actual event on Thursday.'
+
+  it('S5: is shown in full before it can be sent, since its row is cut', async () => {
+    const { fake, sent, openFirst } = await world(['anna'], [], [LONG])
+    await openFirst()
+    fake.tap()
+    await settle()
+    fake.down()
+    fake.down()
+    fake.down()
+    await settle()
+    expect(fake.lines().at(-1)).not.toBe(LONG)
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([])
+    expect(fake.lines()[0]).toBe('To Anna')
+    expect(fake.lines().slice(1, -1).join(' ')).toBe(LONG)
+    expect(fake.lines().at(-1)).toBe('Tap to send')
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', LONG]])
+  })
+})
+
+describe('a send that takes a while', () => {
+  const slow = (w: Awaited<ReturnType<typeof world>>) => {
+    let release = () => {}
+    w.gate.wait = new Promise<void>(resolve => (release = resolve))
+    return () => {
+      w.gate.wait = null
+      release()
+    }
+  }
+
+  it('A5: leaves a screen the user opened meanwhile alone when a short answer lands', async () => {
+    const w = await world(['anna', 'sam'])
+    await w.openFirst()
+    w.fake.tap()
+    await settle()
+    const release = slow(w)
+    w.fake.tap()
+    await settle()
+    w.fake.pick('Open chat')
+    await settle()
+    const opened = w.router.current
+    const shown = w.fake.lines()
+    release()
+    await settle()
+    expect(w.sent()).toEqual([['anna', 'OK']])
+    expect(w.router.current).toBe(opened)
+    expect(w.fake.lines()).toEqual(shown)
+  })
+
+  it('A5: leaves a screen the user opened meanwhile alone when a spoken reply lands, and does not offer to send it twice', async () => {
+    const w = await world(['anna', 'sam'], ['see you at twelve thirty'])
+    await w.openFirst()
+    await w.say()
+    const release = slow(w)
+    w.fake.tap()
+    await settle()
+    w.fake.pick('Open chat')
+    await settle()
+    const opened = w.router.current
+    release()
+    await settle()
+    expect(w.router.current).toBe(opened)
+    w.fake.double()
+    await settle()
+    if (w.router.current.id === 'draft:anna') {
+      w.fake.tap()
+      await settle()
+    }
+    expect(w.sent()).toEqual([['anna', 'see you at twelve thirty']])
   })
 })
 
