@@ -45,6 +45,13 @@ describe('a chat said by name, found on the phone', () => {
     expect(findNamed('open sam', chats).rest).toBe('')
   })
 
+  it('drops only a colon or comma after the name, and keeps punctuation that belongs to the message', () => {
+    expect(findNamed('message Sam -5 degrees here', chats).rest).toBe('-5 degrees here')
+    expect(findNamed('message Sam .5 litres is enough', chats).rest).toBe('.5 litres is enough')
+    expect(findNamed('message Sam, see you there', chats).rest).toBe('see you there')
+    expect(findNamed('message Sam - not today', chats).rest).toBe('- not today')
+  })
+
   it('takes the first chat named as the one meant: a name later in the sentence is part of the message', () => {
     expect(findNamed('message Anna Lee ask Launch crew about the demo', chats)).toEqual({
       matches: [chats[0]],

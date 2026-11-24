@@ -72,6 +72,8 @@ const WORDS = {
   start: 'That is the start',
 }
 
+const showable = (words: string) => cleanText(words).trim()
+
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
 
 const line = (chat: Chat | undefined, message: Message) =>
@@ -113,7 +115,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const redraw = () => shell.redraw()
 
   const draftScreen = (id: string, given: string): Screen => {
-    const words = cleanText(given).trim()
+    const words = showable(given)
     const lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
     let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
@@ -349,7 +351,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     choose: () => {
       const { matches, rest } = named()
       if (matches.length !== 1) pick(matches)
-      else if (rest) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest))
+      else if (showable(rest)) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest))
       else router.jump(chatScreen(matches[0].id))
     },
     run: chat => router.open(chatScreen(chat.id)),
@@ -387,7 +389,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
 
   const dictate: Agent = heard => {
     const on = held && router.current === held ? chatOn.get(held) : undefined
-    const words = heard.words.trim()
+    const words = showable(heard.words)
     if (!on || !words) return { kind: 'notMine' }
     if (on.covers) router.replace(draftScreen(on.chat, words))
     else router.open(draftScreen(on.chat, words))

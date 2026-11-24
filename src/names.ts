@@ -14,7 +14,7 @@ interface Token {
 }
 
 const WORD = /[\p{L}\p{N}]+/gu
-const LEAD = /^[\s,:;.-]+/
+const LEAD = /^\s*[:,]?\s*/
 const FUZZY_FROM = 5
 const FIRST_NAME_FROM = 3
 

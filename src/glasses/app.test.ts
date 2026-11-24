@@ -187,6 +187,13 @@ describe('a reply said aloud', () => {
     expect(router.depth).toBe(3)
   })
 
+  it('is not started by words the glasses cannot show at all', async () => {
+    const { say, router, openFirst } = await world(['anna'], ['\u200b'])
+    await openFirst()
+    await say()
+    expect(router.current.id).toBe('chat:anna')
+  })
+
   it('is not started by words said on the list, where no chat is on screen', async () => {
     const { say, router, sent } = await world(['anna'], ['see you at twelve thirty'])
     await say()
