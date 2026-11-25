@@ -38,20 +38,23 @@ describe('words that ask for a message to be written, not sent as said', () => {
   })
 })
 
-describe('the note a writer is given: who is told or asked what, worked out on the phone', () => {
+describe('the note a writer is given: who the message is for, worked out on the phone', () => {
   it('names the person in the chat "them" and drops the telling, so a model cannot take them for someone else', () => {
-    expect(noteOf('tell her yes and ask where')).toBe('Tell them: yes. Ask them: where')
+    expect(noteOf('tell her yes and ask where')).toBe('Tell them: yes and ask where')
     expect(noteOf('Tell everyone the demo moved to four')).toBe('Tell them: the demo moved to four')
     expect(noteOf('let him know that I got the keys')).toBe('Tell them: I got the keys')
     expect(noteOf('ask them if Thursday still works')).toBe('Ask them: if Thursday still works')
-    expect(noteOf('reply that I will call tonight and tell her thanks')).toBe('Tell them: I will call tonight. Tell them: thanks')
-    expect(noteOf('say yes and ask him what time')).toBe('Tell them: yes. Ask them: what time')
+    expect(noteOf('reply that I will call tonight')).toBe('Tell them: I will call tonight')
     expect(noteOf('answer no, not this week')).toBe('Tell them: no, not this week')
   })
 
-  it('keeps every other word as it was said, in its order', () => {
+  it('changes nothing after that: who a later "ask him" or "tell her" means is not for the phone to guess', () => {
+    expect(noteOf('tell her I will call Sam and ask him if he can help')).toBe('Tell them: I will call Sam and ask him if he can help')
     expect(noteOf('tell her I will tell Sam and ask Robin tomorrow')).toBe('Tell them: I will tell Sam and ask Robin tomorrow')
-    expect(noteOf('tell him I will call and ask for a refund')).toBe('Tell them: I will call and ask for a refund')
+    expect(noteOf('say yes and ask him what time')).toBe('Tell them: yes and ask him what time')
+  })
+
+  it('takes any other words whole, as what to tell them', () => {
     expect(noteOf('  see you   at noon ')).toBe('Tell them: see you at noon')
     expect(noteOf('tell her, yes')).toBe('Tell them: tell her, yes')
   })

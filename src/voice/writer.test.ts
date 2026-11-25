@@ -28,7 +28,7 @@ describe('what the app asks of the relay to write a message', () => {
     expect(calls[0].body.model).toBe(WRITER_MODEL)
     const messages = calls[0].body.messages as { role: string; content: string }[]
     expect(messages[0].role).toBe('system')
-    expect(messages.at(-1)).toEqual({ role: 'user', content: 'Tell them: yes. Ask them: where' })
+    expect(messages.at(-1)).toEqual({ role: 'user', content: 'Tell them: yes and ask where' })
     const other = writerThrough(RELAY, ask)
     await other.write('say no', live())
     const again = calls[1].body.messages as { role: string; content: string }[]

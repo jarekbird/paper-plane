@@ -3,16 +3,17 @@ import type { Writer } from '../messenger.ts'
 
 export const WRITER_MODEL = 'mistralai/mistral-nemo'
 const MAX_TOKENS = 200
-// With the examples below this wording gave a faithful message 69 times of 72 with mistralai/mistral-nemo on 2026-11-25 (docs/proof/say-it-short/live.md).
+// With the examples below this wording gave a faithful message 80 times of 84 with mistralai/mistral-nemo on 2026-11-25 (docs/proof/say-it-short/live.md).
 const SYSTEM =
-  'You turn a spoken note into the text message to send. The note says what to tell or ask "them": "them" is the person who will read the message, so write to them as "you" and never mention "them" or the telling. Write as the sender, in the first person, the way people type on a phone: one or two short, natural sentences with normal capital letters and punctuation. Keep every point of the note and add nothing: no fact, name, time or place that is not in it, no greeting, no sign-off, no emoji. A thing to ask becomes a question. Answer with the message only, without quotes.'
+  'You turn a spoken note into the text message to send. The note says what to tell or ask "them": "them" is the person who will read the message, so write to them as "you" and never mention "them" or the telling. Write as the sender, in the first person, the way people type on a phone: one or two short, natural sentences with normal capital letters and punctuation. Keep every point of the note and add nothing: no fact, name, time or place that is not in it, no greeting, no sign-off, no emoji. A thing to ask becomes a question. A later "and ask" or "and tell" in the note is also meant for them, unless it is plainly something the sender will do with someone else. Answer with the message only, without quotes.'
 const EXAMPLES = [
-  ['Tell them: sure. Ask them: when', 'Sure. When?'],
+  ['Tell them: sure and ask when', 'Sure. When?'],
   ['Tell them: the meeting is cancelled', 'The meeting is cancelled.'],
   ['Ask them: if they can pick me up', 'Can you pick me up?'],
-  ['Ask them: if Friday is still fine', 'Is Friday still fine?'],
-  ['Tell them: the door is open. Tell them: to come in', 'The door is open. Come in.'],
   ['Tell them: thanks, I owe you one', 'Thanks, I owe you one.'],
+  ['Ask them: if Friday is still fine', 'Is Friday still fine?'],
+  ['Tell them: the door is open and tell her to come in', 'The door is open. Come in.'],
+  ['Tell them: I will ring Robin and ask her if she can come', 'I will ring Robin and ask her if she can come.'],
 ].flatMap(([note, message]) => [
   { role: 'user', content: note },
   { role: 'assistant', content: message },

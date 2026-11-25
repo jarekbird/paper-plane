@@ -16,7 +16,6 @@ export function instructed(words: string): boolean {
 }
 
 const PERSON = '(?:her|him|them|everyone|everybody)'
-const QUESTION = '(?:where|what|when|who|whom|whose|why|how|if|whether|which)'
 export const TELL = 'Tell them: '
 export const ASK = 'Ask them: '
 const LEADS: [RegExp, string][] = [
@@ -25,16 +24,11 @@ const LEADS: [RegExp, string][] = [
   [new RegExp(`^\\s*ask\\s+${PERSON}\\s+`, 'i'), ASK],
   [/^\s*(?:say|reply|answer|respond)\s+(?:(?:that|with)\s+)?/i, TELL],
 ]
-const NEXT: [RegExp, string][] = [
-  [new RegExp(`\\s+and\\s+ask\\s+(?:${PERSON}\\s+|(?=${QUESTION}\\b))`, 'gi'), `. ${ASK}`],
-  [new RegExp(`\\s+and\\s+tell\\s+${PERSON}\\s+(?:that\\s+)?`, 'gi'), `. ${TELL}`],
-]
-
 export function noteOf(words: string): string {
   const said = words.replace(/\s+/g, ' ').trim()
   const lead = instructed(said) ? LEADS.find(([found]) => found.test(said)) : undefined
   if (!lead) return `${TELL}${said}`
-  return NEXT.reduce((note, [found, next]) => note.replace(found, next), said.replace(lead[0], lead[1]))
+  return said.replace(lead[0], lead[1])
 }
 
 export function oneMessage(text: string): string {
