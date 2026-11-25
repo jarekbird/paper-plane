@@ -48,6 +48,20 @@ or any service, open `http://127.0.0.1:5183/#say=See you at noon` instead: each 
 npm run check   # format, lint, architecture rules, types, tests, build and Even Hub's store rules
 ```
 
+### Your own Telegram account
+
+The build has Telegram in it only when it is given a Telegram app id (from <https://my.telegram.org/apps>). Put it
+in `.env.local`, which is never committed:
+
+```sh
+VITE_TELEGRAM_API_ID=1234567
+VITE_TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
+```
+
+The phone page then has a Telegram section: your number, the code Telegram sends to your Telegram app, and your
+password if the account has one. To see that section without Telegram, open `http://127.0.0.1:5183/#account=sample`
+and use the code `12345`.
+
 ## How it is built
 
 - An Even Hub app: web files in the Even Realities App's web view, drawing on the glasses through the Even Hub SDK.

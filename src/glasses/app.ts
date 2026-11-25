@@ -12,6 +12,7 @@ import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   Shell,
+  text,
   wrapText,
   type Action,
   type Agent,
@@ -35,6 +36,7 @@ export interface Hearing {
 }
 
 export interface GlassesParts {
+  title?: string
   inbox: Inbox
   messenger: Messenger
   phrases: Phrases
@@ -55,6 +57,7 @@ const LIKED = '👍'
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
   title: 'Paper Plane',
+  tapToRetry: 'Tap to try again',
   whichChat: 'Which chat?',
   noSuchChat: 'No chat by that name',
   nothingUnread: 'Nothing is unread',
@@ -123,6 +126,19 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
     up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
   }
+}
+
+export function startWaiting(life: Lifetime, shown: Display, body: string, retry?: () => void): void {
+  const again = action({ id: 'retry', say: 'Try again', run: () => retry?.() })
+  const router = new Router({
+    home: {
+      id: 'waiting',
+      actions: () => (retry ? [again] : []),
+      view: () => (retry ? boxes(page(WORDS.title, body, WORDS.tapToRetry), { on: { tap: again } }) : text({ title: WORDS.title, body })),
+    },
+  })
+  life.own(() => router.close())
+  new Shell(life, shown.glasses, router)
 }
 
 export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {
@@ -554,7 +570,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     home: {
       id: 'chats',
       context: () => 'The list of chats',
-      view: () => list({ title: WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
+      view: () => list({ title: parts.title ?? WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
     },
     actions: () => [open, message, readAll],
   })

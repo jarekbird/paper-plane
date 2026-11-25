@@ -1,34 +1,35 @@
 import { waitForEvenAppBridge } from '@evenrealities/even_hub_sdk'
 import { Lifetime, scriptedSpeech } from 'earshot'
+import { startApp } from './app.ts'
+import { demoAccount } from './demo/account.ts'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
-import { startGlasses } from './glasses/app.ts'
 import { display } from './glasses/display.ts'
-import { Inbox } from './inbox.ts'
+import { launch } from './launch.ts'
 import { startPhone } from './phone/page.ts'
-import { Phrases } from './phrases.ts'
 import { appStore } from './store.ts'
 
-const flags = new URLSearchParams(location.hash.slice(1))
-const said = flags.get('say')?.split('|')
+const id = import.meta.env.VITE_TELEGRAM_API_ID
+const hash = import.meta.env.VITE_TELEGRAM_API_HASH
+const how = launch(location.hash, { id, hash })
 
 const life = new Lifetime()
 const bridge = await waitForEvenAppBridge()
-const messenger = demoMessenger()
-const store = appStore(bridge)
-const inbox = new Inbox(life, messenger, store)
-const phrases = new Phrases(store)
-await inbox.start()
-await phrases.start()
-if (inbox.fresh) await inbox.pick(DEMO_PICKS)
+const { store, sessions } = appStore(bridge)
 
-startGlasses(life, display(life, bridge, { trace: flags.has('trace') }), {
-  inbox,
-  messenger,
-  phrases,
-  ...(said ? { hearing: { transcribe: scriptedSpeech(said) } } : {}),
-})
-startPhone(life, document.getElementById('app')!, {
-  inbox,
-  phrases,
-  note: 'These are sample chats. Pick the ones you want on your glasses.',
+async function ownAccount() {
+  if (how.own === 'sample') return { account: demoAccount({ signedIn: false }), messenger: demoMessenger() }
+  if (!id || !hash) return undefined
+  const { telegram } = await life.guard(import('./telegram/client.ts'))
+  return telegram(life, { apiId: Number(id), apiHash: hash }, sessions)
+}
+
+const own = await ownAccount()
+await startApp({
+  life,
+  display: display(life, bridge, { trace: how.trace }),
+  store,
+  sample: { messenger: demoMessenger(), picks: DEMO_PICKS },
+  ...(own ? { telegram: own } : {}),
+  ...(how.said ? { hearing: { transcribe: scriptedSpeech(how.said) } } : {}),
+  phone: (session, parts) => startPhone(session, document.getElementById('app')!, parts),
 })

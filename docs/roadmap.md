@@ -19,7 +19,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 
 | #   | Feature                                                                                                    | State                    |
 | --- | ---------------------------------------------------------------------------------------------------------- | ------------------------ |
-| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | adapter written, not run |
+| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; never run on Telegram |
 | 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | chats built, on samples  |
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | list built, on samples   |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
@@ -38,6 +38,13 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               |                          |
 
 Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
+
+## Before the Telegram build can ship
+
+- An app id (my.telegram.org). Without one the build has no Telegram and shows only the sample account.
+- The store check on a build that contains the Telegram library: the library names link formats (`t.me`, `tg://`)
+  and builds its socket address at run time, which Earshot's check and Even's review refuse (rule S2). The build
+  without an app id leaves the library out and passes.
 
 ## Not now
 

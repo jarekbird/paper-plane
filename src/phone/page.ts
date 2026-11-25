@@ -2,10 +2,12 @@ import type { Lifetime } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Phrases } from '../phrases.ts'
 import { pickRows, setPicked } from './model.ts'
+import type { SignIn } from './signin.ts'
 
 export interface PhoneParts {
-  inbox: Inbox
+  inbox: Inbox | null
   phrases: Phrases
+  signIn: SignIn | null
   note: string
 }
 
@@ -16,7 +18,89 @@ const element = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): 
 }
 
 export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts): void {
-  const { inbox, phrases, note } = parts
+  const { phrases, signIn, note } = parts
+  const account = element('section')
+  let accountRows = life.child()
+
+  const field = (type: string, placeholder: string, autocomplete: AutoFill, numeric = false) => {
+    const input = element('input')
+    input.type = type
+    input.placeholder = placeholder
+    input.autocomplete = autocomplete
+    if (numeric) input.inputMode = 'numeric'
+    return input
+  }
+  const form = (rows: Lifetime, input: HTMLInputElement, button: string, busy: boolean, submit: (value: string) => void) => {
+    const send = element('button', button)
+    send.disabled = busy
+    const made = element('form')
+    made.append(input, send)
+    rows.listen(made, 'submit', event => {
+      event.preventDefault()
+      submit(input.value)
+    })
+    return made
+  }
+  const plain = (rows: Lifetime, text: string, busy: boolean, press: () => void) => {
+    const button = element('button', text)
+    button.type = 'button'
+    button.disabled = busy
+    rows.listen(button, 'click', press)
+    return button
+  }
+
+  const drawAccount = () => {
+    if (!signIn) return
+    accountRows.end()
+    accountRows = life.child()
+    const rows = accountRows
+    const { step, busy, problem, name } = signIn.view()
+    const parts: HTMLElement[] = [element('h2', 'Telegram')]
+    if (problem) {
+      const shown = element('p', problem)
+      shown.className = 'problem'
+      parts.push(shown)
+    }
+    if (step === 'checking') parts.push(element('p', 'Checking your sign-in…'))
+    if (step === 'offline') parts.push(plain(rows, 'Try again', busy, () => void signIn.retry()))
+    if (step === 'phone') {
+      parts.push(
+        element(
+          'p',
+          'Sign in to see your own chats. Your number, code and password go straight to Telegram, and the sign-in stays on this phone.',
+        ),
+        form(rows, field('tel', '+1 555 010 0199', 'tel'), 'Send code', busy, number => void signIn.phone(number)),
+      )
+    }
+    if (step === 'code') {
+      parts.push(
+        element('p', 'Telegram sent you a code, in your Telegram app or by text message. Type it here.'),
+        form(rows, field('text', 'Code', 'one-time-code', true), 'Sign in', busy, code => void signIn.code(code)),
+        plain(rows, 'Use another number', busy, () => signIn.another()),
+      )
+    }
+    if (step === 'password') {
+      parts.push(
+        element('p', 'This account has a password as a second step. Type it here.'),
+        form(rows, field('password', 'Password', 'current-password'), 'Sign in', busy, password => void signIn.password(password)),
+        plain(rows, 'Use another number', busy, () => signIn.another()),
+      )
+    }
+    if (step === 'in')
+      parts.push(
+        element('p', `Signed in as ${name ?? 'you'}.`),
+        plain(rows, 'Sign out', busy, () => void signIn.signOut()),
+      )
+    account.replaceChildren(...parts)
+  }
+
+  if (signIn) life.own(signIn.onChange(drawAccount))
+  drawAccount()
+  if (!parts.inbox) {
+    root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note))
+    return
+  }
+  const inbox = parts.inbox
   const chats = element('section')
   const answers = element('section')
   let chatRows = life.child()
@@ -76,7 +160,7 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
     )
   }
 
-  root.replaceChildren(element('h1', 'Paper Plane'), element('p', note), chats, answers)
+  root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), chats, answers)
   life.own(inbox.onChange(drawChats))
   life.own(phrases.onChange(drawAnswers))
   drawChats()
