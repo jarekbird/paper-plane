@@ -16,7 +16,6 @@ import {
   type Action,
   type Agent,
   type Box,
-  type Glasses,
   type Lifetime,
   type NavigatorModel,
   type Screen,
@@ -24,6 +23,7 @@ import {
   type VoiceOptions,
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
+import type { Display } from './display.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
@@ -125,8 +125,10 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
   }
 }
 
-export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesParts): GlassesApp {
+export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {
   const { inbox, messenger, phrases, hearing } = parts
+  const { glasses, upToDate } = shown
+  const unseen = () => (upToDate() ? null : WORDS.loading)
   const sentIn = new Map<string, (message: Message) => void>()
   const chatOn = new WeakMap<Screen, { chat: string; covers: boolean }>()
   const choices = new WeakMap<Screen, () => Chat[]>()
@@ -157,7 +159,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
-      blocked: busy,
+      blocked: () => busy() ?? unseen(),
       run: async () => {
         if (!screen) return
         state = 'sending'
@@ -182,7 +184,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       say: 'Keep for later',
       hint: 'Keeps the reply as a draft in Telegram, to finish on the phone',
       risk: 'voice',
-      blocked: busy,
+      blocked: () => busy() ?? unseen(),
       run: async () => {
         if (!screen) return
         const before = state
@@ -237,6 +239,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     let messages: Message[] | null = null
     let failed = false
     let started = 0
+    let readUpTo: string | null | undefined
     let pending = false
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
@@ -287,7 +290,12 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       markRead(entered)
     }
     const markRead = (entered: Lifetime) => {
-      if (!pending && !failed && (inbox.chat(id)?.unread ?? 0) > 0) void entered.guard(messenger.read(id)).catch(() => {})
+      const newestId = messages?.at(-1)?.id ?? null
+      if (pending || failed || newestId === readUpTo || (inbox.chat(id)?.unread ?? 0) === 0) return
+      readUpTo = newestId
+      void entered.guard(messenger.read(id)).catch(() => {
+        if (readUpTo === newestId) readUpTo = undefined
+      })
     }
 
     const sent = (message: Message) => {
@@ -324,7 +332,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     })
 
     const current = () => !pending && !failed && messages !== null
-    const newest = () => (current() ? (inView().find(message => !message.mine) ?? null) : null)
+    const newest = () => (current() && upToDate() ? (inView().find(message => !message.mine) ?? null) : null)
     const onNewest = (spec: {
       id: string
       say: string
@@ -355,7 +363,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         hint: spec.hint,
         risk: 'voice',
         blocked: () => {
-          if (!current()) return WORDS.loading
+          if (!current() || !upToDate()) return WORDS.loading
           const message = newest()
           return message ? (spec.refused?.(message) ?? null) : WORDS.nothingFromOthers
         },
@@ -393,7 +401,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       say: 'Reply',
       hint: 'Sends one short answer to the chat on screen',
       risk: 'voice',
-      blocked: () => (sending ? WORDS.sending : null),
+      blocked: () => (sending ? WORDS.sending : unseen()),
       targets: () => {
         const own = new Set(phrases.list())
         const newest = messages?.findLast(message => !message.mine)?.text ?? null

@@ -1,7 +1,8 @@
 import { waitForEvenAppBridge } from '@evenrealities/even_hub_sdk'
-import { Glasses, Lifetime, scriptedSpeech } from 'earshot'
+import { Lifetime, scriptedSpeech } from 'earshot'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
 import { startGlasses } from './glasses/app.ts'
+import { display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
 import { startPhone } from './phone/page.ts'
 import { Phrases } from './phrases.ts'
@@ -20,7 +21,7 @@ await inbox.start()
 await phrases.start()
 if (inbox.fresh) await inbox.pick(DEMO_PICKS)
 
-startGlasses(life, new Glasses(life, bridge, { trace: flags.has('trace') }), {
+startGlasses(life, display(life, bridge, { trace: flags.has('trace') }), {
   inbox,
   messenger,
   phrases,

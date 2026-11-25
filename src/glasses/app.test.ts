@@ -1,10 +1,11 @@
-import { createStore, Glasses, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech, type NavigatorModel, type Question } from 'earshot'
+import { createStore, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech, type NavigatorModel, type Question } from 'earshot'
 import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoMessenger } from '../demo/messenger.ts'
 import { Inbox } from '../inbox.ts'
 import { Phrases } from '../phrases.ts'
 import { startGlasses } from './app.ts'
+import { display } from './display.ts'
 
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
 const tone = (ms: number) => new Uint8Array(new Int16Array((ms / 1000) * SAMPLE_RATE).map((_, at) => 8_000 * Math.sin(at / 5)).buffer)
@@ -25,7 +26,7 @@ async function world(picks: string[], said: string[] = [], own: string[] = [], m
     await gate.wait
     return send(chat, text)
   }
-  const app = startGlasses(life, new Glasses(life, fake.bridge), {
+  const app = startGlasses(life, display(life, fake.bridge), {
     inbox,
     messenger,
     phrases,
@@ -99,6 +100,24 @@ describe('a chat', () => {
     fake.double()
     await settle()
     expect(fake.lines()).toEqual(['Paper Plane', '> Anna'])
+  })
+
+  it('is marked read once, also when Telegram reports the read itself and the list of chats is slow to refresh', async () => {
+    const { messenger, openFirst } = await world(['anna'])
+    const mine = (await messenger.history('anna', 6)).find(message => message.mine)!
+    const read = messenger.read
+    let reads = 0
+    messenger.read = async chat => {
+      reads++
+      await read(chat)
+      messenger.edit(mine, mine.text)
+    }
+    const history = vi.spyOn(messenger, 'history')
+    messenger.chats = () => new Promise(() => {})
+    await openFirst()
+    await settle(5_000)
+    expect(reads).toBe(1)
+    expect(history.mock.calls.length).toBeLessThanOrEqual(3)
   })
 
   it('names who wrote each message in a group', async () => {
@@ -240,10 +259,25 @@ describe('a short answer', () => {
     await settle()
     expect(sent()).toEqual([])
     fake.down()
+    await settle()
     fake.tap()
     await settle()
     expect(sent()).toEqual([['anna', 'No']])
     expect(router.current.id).toBe('chat:anna')
+  })
+
+  it('S5: is not sent by a tap that comes before the glasses have drawn which row is chosen', async () => {
+    const { fake, sent, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.tap()
+    await settle()
+    fake.down()
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([])
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', 'Thanks']])
   })
 
   it('lists the user’s own phrases after the fixed answers', async () => {
@@ -933,6 +967,23 @@ describe('the newest message from someone else', () => {
     messenger.chats = chats
     release()
     await settle()
+  })
+
+  it('S5: is not saved while the glasses have not yet drawn its edited text', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.refuse('update', 1)
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    await settle(100)
+    expect(fake.lines()[1]).toBe('I can do 12:30 at the usual place.')
+    fake.pick('Save')
+    await settle(100)
+    expect(messenger.saved()).toEqual([])
+    await settle(3_000)
+    expect(fake.lines()[1]).toBe('Send 500 to this account.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual(['Send 500 to this account.'])
   })
 
   it('is not liked twice', async () => {
