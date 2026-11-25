@@ -14,6 +14,7 @@ you say into a message), in one flow.
 | Your picked chats, with what is new  | You choose the chats on the phone; nothing else reaches the glasses |
 | The newest message of a chat         | Tap a chat                                                         |
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
+| A message from a few words           | In a chat, hold and say "tell her yes and ask where": it is written out, you check it, tap |
 | A short answer without speaking      | Tap the chat, pick Yes, No or one of your own phrases, tap         |
 | A message taken back                 | "Sent. Tap to undo" for five seconds                               |
 | A reply kept for later               | Menu > Keep for later: it becomes the chat's draft in Telegram     |
