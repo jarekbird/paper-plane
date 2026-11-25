@@ -236,8 +236,6 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
     let failed = false
-    let seen: string | null | undefined
-    let shownFor: string | null | undefined
     let started = 0
     let pending = false
     let sending = false
@@ -270,8 +268,6 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
 
     const load = async (entered: Lifetime) => {
       const turn = ++started
-      const lastId = inbox.chat(id)?.last?.id ?? null
-      seen = lastId
       pending = true
       let loaded: Message[]
       try {
@@ -287,9 +283,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       pending = false
       messages = loaded
       failed = false
-      shownFor = lastId
       redraw()
-      void entered.guard(messenger.read(id)).catch(() => {})
+      if ((inbox.chat(id)?.unread ?? 0) > 0) void entered.guard(messenger.read(id)).catch(() => {})
     }
 
     const sent = (message: Message) => {
@@ -325,7 +320,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
-    const current = () => !pending && !failed && messages !== null && (inbox.chat(id)?.last?.id ?? null) === shownFor
+    const current = () => !pending && !failed && messages !== null
     const newest = () => (current() ? (inView().find(message => !message.mine) ?? null) : null)
     const onNewest = (spec: {
       id: string
@@ -349,7 +344,6 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           return
         }
         acting = false
-        void load(entered)
         shell.notice(spec.done)
       }
       return action<Message>({
@@ -364,7 +358,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         },
         targets: () => {
           const message = newest()
-          return message ? [{ id: message.id, say: WORDS.newestMessage, value: message }] : []
+          return message ? [{ id: `${message.id}\n${message.text}`, say: WORDS.newestMessage, value: message }] : []
         },
         choose: () => {
           const message = newest()
@@ -440,7 +434,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         })
         entered.own(
           inbox.onChange(() => {
-            if ((inbox.chat(id)?.last?.id ?? null) !== seen) void load(entered)
+            void load(entered)
           }),
         )
         void load(entered)

@@ -53,6 +53,7 @@ export const DEMO_PICKS: readonly string[] = ['anna', 'launch', 'news']
 
 export interface DemoMessenger extends Messenger {
   arrive(chat: string, from: string, text: string): Message
+  edit(message: Message, text: string): void
   sent(): readonly Message[]
   saved(): readonly Message[]
   drafts(): ReadonlyMap<string, string>
@@ -152,6 +153,13 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       chat.unread++
       tell()
       return arrived
+    },
+    edit: (message, text) => {
+      const chat = find(message.chat)
+      const at = chat.messages.findIndex(candidate => candidate.id === message.id)
+      if (at < 0) throw new Error('No such message')
+      chat.messages[at] = { ...chat.messages[at], text }
+      tell()
     },
     sent: () => outbox,
     saved: () => kept,

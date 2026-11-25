@@ -80,6 +80,16 @@ describe('the list of chats', () => {
 })
 
 describe('a chat', () => {
+  it('is marked read only when it has something new, so opening it does not keep asking Telegram', async () => {
+    const { messenger, openFirst } = await world(['sam'])
+    const read = vi.spyOn(messenger, 'read')
+    const history = vi.spyOn(messenger, 'history')
+    await openFirst()
+    await settle(5_000)
+    expect(read).not.toHaveBeenCalled()
+    expect(history).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the newest message first, says how to answer, and marks the chat read once it is shown', async () => {
     const { fake, unread, openFirst } = await world(['anna'])
     await openFirst()
@@ -854,6 +864,49 @@ describe('the newest message from someone else', () => {
     waiting[0]()
     await settle()
     expect(fake.lines()[1]).toBe('Second of two')
+  })
+
+  it('shows the new text when it is edited, and saves what is shown', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const newest = (await messenger.history('anna', 1))[0]
+    messenger.edit(newest, 'I can do 1:30 instead.')
+    await settle()
+    expect(fake.lines()[1]).toBe('I can do 1:30 instead.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual(['I can do 1:30 instead.'])
+  })
+
+  it('S5: is not saved when it is edited between the spoken command and the tap', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['save this'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    await settle()
+    fake.tap()
+    await settle()
+    expect(messenger.saved()).toEqual([])
+  })
+
+  it('S5: is not saved from the old text while the edited one is still loading', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    let release = () => {}
+    messenger.history = async (chat, limit) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return history(chat, limit)
+    }
+    messenger.edit((await history('anna', 1))[0], 'Send 500 to this account.')
+    await settle()
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toEqual([])
+    messenger.history = history
+    release()
+    await settle()
   })
 
   it('is not liked twice', async () => {
