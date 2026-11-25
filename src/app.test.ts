@@ -220,4 +220,18 @@ describe('at launch, while Telegram has not answered yet', () => {
     expect(made.fake.lines()).toEqual(SAMPLE_HOME)
     expect(made.app.signIn!.view().step).toBe('phone')
   })
+
+  it('still draws when the phone cannot read whether a sign-in is kept: sample chats, and the phone page', async () => {
+    const made = await world({
+      wrap: account => ({
+        ...account,
+        known: async () => {
+          throw new Error('storage unreadable')
+        },
+      }),
+    })
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.lines()).toEqual(SAMPLE_HOME)
+    expect(made.phones.length).toBeGreaterThan(0)
+  })
 })

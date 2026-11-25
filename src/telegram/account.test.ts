@@ -200,6 +200,57 @@ describe('the Telegram account', () => {
     },
   )
 
+  it('S5: says the user is signed in when a failed sign-in could not be undone, since the sign-in is still there', async () => {
+    const side = telegramSide(false)
+    let saved: string | null = null
+    let stuck = false
+    const place: SessionPlace = {
+      load: async () => saved,
+      save: async session => {
+        if (stuck && session === null) throw new Error('storage is full')
+        saved = session
+      },
+    }
+    const first = side.client()
+    first.startUpdatesLoop = async () => refuse('NETWORK_DOWN')
+    first.logOut = async () => refuse('NETWORK_DOWN')
+    const account = accountOver(new Lifetime(), first, place)
+    await account.askCode(PHONE, live())
+    stuck = true
+    expect(await account.giveCode(CODE, live())).toEqual({ id: '4242', name: NAME })
+    expect(saved).toMatch(/^session-/)
+  })
+
+  it('S5: answers with the signed-in user, not silence, when an attempt the user left could not be undone', async () => {
+    const side = telegramSide(false)
+    let saved: string | null = null
+    let stuck = false
+    const place: SessionPlace = {
+      load: async () => saved,
+      save: async session => {
+        if (stuck && session === null) throw new Error('storage is full')
+        saved = session
+      },
+    }
+    const first = side.client()
+    first.logOut = async () => refuse('NETWORK_DOWN')
+    let answer = () => {}
+    const start = first.startUpdatesLoop.bind(first)
+    first.startUpdatesLoop = async () => {
+      await new Promise<void>(resolve => (answer = resolve))
+      return start()
+    }
+    const account = accountOver(new Lifetime(), first, place)
+    await account.askCode(PHONE, live())
+    const left = new AbortController()
+    const attempt = account.giveCode(CODE, left.signal)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    stuck = true
+    left.abort()
+    answer()
+    expect(await attempt).toEqual({ id: '4242', name: NAME })
+  })
+
   it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
     const made = world(false)
     await made.account.askCode(PHONE, live())

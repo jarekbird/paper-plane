@@ -133,6 +133,32 @@ describe('signing in on the phone', () => {
     expect(session.signedIn).toBe(false)
   })
 
+  it('S5: shows the user as signed in, with the way out, when the attempt they left signed them in after all', async () => {
+    let release = () => {}
+    const { signIn, changes } = world({
+      wrap: account => ({
+        ...account,
+        giveCode: async () => {
+          await new Promise<void>(resolve => (release = resolve))
+          return DEMO_WHO
+        },
+      }),
+    })
+    await signIn.start()
+    await signIn.phone(PHONE)
+    const checking = signIn.code(DEMO_CODE)
+    signIn.another()
+    release()
+    await checking
+    expect(signIn.view()).toEqual({
+      step: 'in',
+      busy: false,
+      name: DEMO_NAME,
+      problem: 'You are signed in: the sign-in you left could not be undone. Sign out if you did not mean to.',
+    })
+    expect(changes).toEqual([DEMO_WHO])
+  })
+
   it('is signed in at once on the next launch', async () => {
     const { signIn, changes } = world({ signedIn: true })
     expect(await signIn.start()).toEqual(DEMO_WHO)

@@ -44,31 +44,46 @@ function problemOf(error: unknown): SignInError {
 export function accountOver(life: Lifetime, client: AuthClientLike, place: SessionPlace): Account {
   let pending: { phone: string; hash: string } | null = null
 
-  const forget = async () => {
-    await life.guard(place.save(null).catch(() => {}))
-    await life.guard(Promise.resolve(client.logOut()).catch(() => {}))
+  const done = async (work: () => Promise<unknown>): Promise<boolean> => {
+    try {
+      await life.guard(work())
+      return true
+    } catch (error) {
+      if (error instanceof LifetimeEnded) throw error
+      return false
+    }
+  }
+
+  const forget = async (): Promise<boolean> => {
+    const removed = await life.guard(done(() => place.save(null)))
+    const ended = await life.guard(done(async () => client.logOut()))
+    return removed || ended
   }
 
   const entered = async (user: UserLike, signal: AbortSignal): Promise<Who> => {
-    const left = async (): Promise<never> => {
-      await life.guard(forget())
+    const who = { id: String(user.id), name: user.displayName }
+    let stored = false
+    const undo = async (failed: boolean): Promise<Who> => {
+      const gone = await life.guard(forget())
+      if (!gone && stored) return who
+      if (failed) throw new SignInError('other')
       return signal.throwIfAborted() as never
     }
     try {
-      if (signal.aborted) return await life.guard(left())
+      if (signal.aborted) return await life.guard(undo(false))
       const session = await life.guard(client.exportSession())
-      if (signal.aborted) return await life.guard(left())
+      if (signal.aborted) return await life.guard(undo(false))
       await life.guard(place.save(session))
-      if (signal.aborted) return await life.guard(left())
+      stored = true
+      if (signal.aborted) return await life.guard(undo(false))
       await life.guard(client.startUpdatesLoop())
-      if (signal.aborted) return await life.guard(left())
+      if (signal.aborted) return await life.guard(undo(false))
     } catch (error) {
-      if (error instanceof LifetimeEnded || signal.aborted) throw error
-      await life.guard(forget())
-      throw new SignInError('other')
+      if (error instanceof LifetimeEnded || error instanceof SignInError || signal.aborted) throw error
+      return life.guard(undo(true))
     }
     pending = null
-    return { id: String(user.id), name: user.displayName }
+    return who
   }
 
   return {

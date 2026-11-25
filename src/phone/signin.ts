@@ -20,6 +20,7 @@ const PROBLEMS: Record<SignInProblem, string> = {
 }
 const SIGNED_OUT_HERE = 'Signed out on this phone. Telegram could not be told: end this session in Telegram, under Devices.'
 const ENDED = 'Your Telegram sign-in has ended. Sign in again.'
+const NOT_UNDONE = 'You are signed in: the sign-in you left could not be undone. Sign out if you did not mean to.'
 const NOT_SIGNED_OUT = 'Could not sign out on this phone. Try again.'
 
 export class SignIn {
@@ -68,7 +69,7 @@ export class SignIn {
 
   async code(code: string): Promise<void> {
     if (this.#view.step !== 'code' || this.#view.busy) return
-    const given = await this.#run(signal => this.#account.giveCode(code.trim(), signal), 'code')
+    const given = await this.#run(signal => this.#account.giveCode(code.trim(), signal), 'code', true)
     if (!given) return
     if (given.done === 'password') return this.#show({ step: 'password' })
     this.#entered(given.done)
@@ -76,7 +77,7 @@ export class SignIn {
 
   async password(password: string): Promise<void> {
     if (this.#view.step !== 'password' || this.#view.busy) return
-    const given = await this.#run(signal => this.#account.givePassword(password, signal), 'password')
+    const given = await this.#run(signal => this.#account.givePassword(password, signal), 'password', true)
     if (given) this.#entered(given.done)
   }
 
@@ -101,6 +102,13 @@ export class SignIn {
     this.#changed(null)
   }
 
+  #stayed(who: Who): void {
+    this.#attempt.abort()
+    this.#attempt = new AbortController()
+    this.#show({ step: 'in', name: who.name, problem: NOT_UNDONE })
+    this.#changed(who)
+  }
+
   #entered(who: Who): void {
     this.#show({ step: 'in', name: who.name })
     this.#changed(who)
@@ -114,11 +122,13 @@ export class SignIn {
     return this.#attempt
   }
 
-  async #run<T>(work: (signal: AbortSignal) => Promise<T>, from: SignInStep): Promise<{ done: T } | null> {
+  async #run<T>(work: (signal: AbortSignal) => Promise<T>, from: SignInStep, signsIn = false): Promise<{ done: T } | null> {
     const attempt = this.#begin()
     try {
       const done = await this.#life.guard(work(attempt.signal))
-      return attempt.signal.aborted ? null : { done }
+      if (!attempt.signal.aborted) return { done }
+      if (signsIn && typeof done === 'object' && done !== null && 'id' in done) this.#stayed(done as unknown as Who)
+      return null
     } catch (error) {
       if (error instanceof LifetimeEnded || attempt.signal.aborted) return null
       const problem = error instanceof SignInError ? error.problem : 'other'

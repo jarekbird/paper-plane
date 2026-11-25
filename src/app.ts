@@ -1,4 +1,4 @@
-import type { Lifetime, Store } from 'earshot'
+import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
 import { startGlasses, startWaiting, type Hearing } from './glasses/app.ts'
 import type { Display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
@@ -74,7 +74,15 @@ export async function startApp(parts: AppParts): Promise<App> {
   }
 
   const signIn: SignIn | null = telegram ? new SignIn(life, telegram.account, show) : null
-  const known = telegram ? await life.guard(telegram.account.known()) : false
+  const kept = async (account: Account) => {
+    try {
+      return await life.guard(account.known())
+    } catch (error) {
+      if (error instanceof LifetimeEnded) throw error
+      return false
+    }
+  }
+  const known = telegram ? await life.guard(kept(telegram.account)) : false
   if (known) wait()
   else show(null)
   const offline = (model: SignIn) => {
