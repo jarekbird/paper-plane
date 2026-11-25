@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parts } from './pack.mjs'
 
 const made = []
@@ -12,8 +12,22 @@ function folder(files) {
   return dir
 }
 
+const SETTINGS = ['VITE_TELEGRAM_API_ID', 'VITE_TELEGRAM_API_HASH', 'VITE_RELAY']
+const given = new Map()
+
+beforeEach(() => {
+  for (const name of SETTINGS) {
+    given.set(name, process.env[name])
+    delete process.env[name]
+  }
+})
+
 afterEach(() => {
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true })
+  for (const [name, value] of given) {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
 })
 
 describe('what a pack says it holds, read the way the build reads it', () => {
@@ -30,6 +44,12 @@ describe('what a pack says it holds, read the way the build reads it', () => {
   it('needs both halves of the app id', () => {
     expect(parts(folder({ '.env.local': 'VITE_TELEGRAM_API_ID=123\n' }))).toEqual({ telegram: false, voice: false })
     expect(parts(folder({}))).toEqual({ telegram: false, voice: false })
+  })
+
+  it('counts a setting given in the environment, as the build does, and nothing the test run itself was started with', () => {
+    expect(parts(folder({}))).toEqual({ telegram: false, voice: false })
+    process.env.VITE_RELAY = 'https://relay.example'
+    expect(parts(folder({}))).toEqual({ telegram: false, voice: true })
   })
 
   it('follows the production files and their order, as the build does', () => {

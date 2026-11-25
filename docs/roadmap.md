@@ -35,7 +35,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
 | 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              |                          |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
-| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               |                          |
+| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.1.0: samples, voice |
 
 Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 
