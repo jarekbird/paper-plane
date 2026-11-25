@@ -18,7 +18,7 @@ const refuse = (text: string): never => {
 function telegramSide(twoStep: boolean) {
   const sessions = new Set<string>()
   let issued = 0
-  const client = (): AuthClientLike & { loops: number } => {
+  const client = (): AuthClientLike & { loops: number; drops: number } => {
     let session: string | null = null
     let codeFor: string | null = null
     let passwordDue = false
@@ -29,6 +29,11 @@ function telegramSide(twoStep: boolean) {
     }
     const self = {
       loops: 0,
+      drops: 0,
+      drop: async () => {
+        self.drops++
+        session = null
+      },
       sendCode: async ({ phone }: { phone: string }) => {
         if (phone !== PHONE) refuse('PHONE_NUMBER_INVALID')
         codeFor = phone
@@ -273,6 +278,34 @@ describe('the Telegram account', () => {
     expect(await made.account.askCode(PHONE, live())).toEqual({ id: '4242', name: NAME })
     expect(made.saved()).not.toBeNull()
     expect(made.first.loops).toBe(1)
+  })
+
+  it('A4: drops the signed-in connection when sign-out could not tell Telegram, so nothing keeps listening', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    made.first.logOut = async () => refuse('NETWORK_DOWN')
+    expect(await made.account.signOut()).toBe('untold')
+    expect(made.first.drops).toBe(1)
+    await expect(made.first.getMe()).rejects.toThrow()
+  })
+
+  it('keeps the connection, now signed out, when Telegram ended the session itself', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    expect(await made.account.signOut()).toBe('told')
+    expect(made.first.drops).toBe(0)
+  })
+
+  it('A4: drops the signed-in connection when an undone sign-in could not be ended at Telegram', async () => {
+    const made = world(false)
+    made.first.startUpdatesLoop = async () => refuse('NETWORK_DOWN')
+    made.first.logOut = async () => refuse('NETWORK_DOWN')
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live()).catch(() => {})
+    expect(made.saved()).toBeNull()
+    expect(made.first.drops).toBe(1)
   })
 
   it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {

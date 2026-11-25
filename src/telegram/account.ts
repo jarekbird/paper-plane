@@ -21,6 +21,7 @@ export interface AuthClientLike {
   exportSession(): Promise<string>
   importSession(session: string, force: boolean): Promise<void>
   startUpdatesLoop(): Promise<void>
+  drop(): Promise<void>
 }
 
 const PROBLEMS: [code: string, problem: SignInProblem][] = [
@@ -57,6 +58,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   const forget = async (): Promise<boolean> => {
     const removed = await life.guard(done(() => place.save(null)))
     const ended = await life.guard(done(async () => client.logOut()))
+    if (removed && !ended) await life.guard(done(() => client.drop()))
     return removed || ended
   }
 
@@ -137,20 +139,12 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     },
     signOut: async () => {
       pending = null
-      let removed = true
-      try {
-        await life.guard(place.save(null))
-      } catch (error) {
-        if (error instanceof LifetimeEnded) throw error
-        removed = false
-      }
-      try {
-        await life.guard(client.logOut())
-        return 'told'
-      } catch (error) {
-        if (error instanceof LifetimeEnded || !removed) throw error
-        return 'untold'
-      }
+      const removed = await life.guard(done(() => place.save(null)))
+      const ended = await life.guard(done(async () => client.logOut()))
+      if (ended) return 'told'
+      if (!removed) throw new SignInError('other')
+      await life.guard(done(() => client.drop()))
+      return 'untold'
     },
   }
 }
