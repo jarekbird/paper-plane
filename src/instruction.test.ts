@@ -44,7 +44,7 @@ describe('the note a writer is given: who the message is for, worked out on the 
     expect(noteOf('Tell everyone the demo moved to four')).toBe('Tell them: the demo moved to four')
     expect(noteOf('let him know I got the keys')).toBe('Tell them: I got the keys')
     expect(noteOf('ask them if Thursday still works')).toBe('Ask them: if Thursday still works')
-    expect(noteOf('respond with thanks and see you there')).toBe('Tell them: thanks and see you there')
+    expect(noteOf('say yes and ask what time')).toBe('Tell them: yes and ask what time')
     expect(noteOf('answer no, not this week')).toBe('Tell them: no, not this week')
   })
 
@@ -52,6 +52,11 @@ describe('the note a writer is given: who the message is for, worked out on the 
     expect(noteOf('tell her I will call Sam and ask him if he can help')).toBe('Tell them: I will call Sam and ask him if he can help')
     expect(noteOf('tell her I will tell Sam and ask Robin tomorrow')).toBe('Tell them: I will tell Sam and ask Robin tomorrow')
     expect(noteOf('say yes and ask him what time')).toBe('Tell them: yes and ask him what time')
+  })
+
+  it('keeps a "with" after the opening for the same reason', () => {
+    expect(noteOf('reply with or without you, I am going')).toBe('Tell them: with or without you, I am going')
+    expect(noteOf('respond with thanks and see you there')).toBe('Tell them: with thanks and see you there')
   })
 
   it('keeps a "that" after the opening: it may be the first word of the message', () => {

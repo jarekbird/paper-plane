@@ -22,7 +22,6 @@ const LEADS: [RegExp, string][] = [
   [new RegExp(`^\\s*let\\s+${PERSON}\\s+know\\s+`, 'i'), TELL],
   [new RegExp(`^\\s*tell\\s+${PERSON}\\s+`, 'i'), TELL],
   [new RegExp(`^\\s*ask\\s+${PERSON}\\s+`, 'i'), ASK],
-  [/^\s*(?:reply|answer|respond)\s+with\s+/i, TELL],
   [/^\s*(?:say|reply|answer|respond)\s+/i, TELL],
 ]
 export function noteOf(words: string): string {

@@ -1,13 +1,14 @@
 # Say it short, tried on the real model
 
 25 November 2026. The app's own writer (`src/voice/writer.ts`) through the deployed relay, model
-`mistralai/mistral-nemo`. 32 made-up instructions, each asked three times: 96 answers.
+`mistralai/mistral-nemo`. 34 made-up instructions, each asked three times: 102 answers.
 
-- **91 of 96** said what the instruction said, added nothing and left nothing out.
+- **93 of 102** said what the instruction said, added nothing and left nothing out.
 - Time to an answer: usually 0.4 to 0.8 seconds, the slowest about 2.
-- The five misses: "Lock up when you leave." twice for "…and tell him to lock up" (words added), and "The blue
-  one is mine." three times for "tell her that and the blue one are mine" ("that" left out). That is why the glasses
-  always show the message first, and "As I said it" puts the words back.
+- The nine misses, three sentences that missed all three times: "Lock up when you leave." for "…and tell him to
+  lock up" (words added), "The blue one is mine too." for "tell her that and the blue one are mine" ("that" left
+  out), and "With a big thank you." for "answer with a big thank you" (reads oddly). That is why the glasses always
+  show the message first, and "As I said it" puts the words back.
 
 | Said | Written (the most common of three) |
 | --- | --- |
@@ -43,6 +44,8 @@
 | reply that works for me | That works for me. |
 | tell him that I will be there by nine | I'll be there by 9. |
 | say that sounds great | Sounds great! |
+| reply with or without you, I am going | With or without you, I'm going. |
+| answer with a big thank you | With a big thank you. |
 
 What made it steady, in the order tried:
 
@@ -50,7 +53,7 @@ What made it steady, in the order tried:
    "Tell everyone…" kept in the message).
 2. The phone now replaces the opening ("tell her", "ask them", "let him know") with "Tell them:" or "Ask them:"
    (`noteOf` in `src/instruction.ts`), so the model cannot take the reader for a third person.
-3. Nine fixed, made-up example pairs go with every request. An earlier try also split "and ask …" on the phone
-   and dropped a "that" after the opening; both changed what some sentences meant, so everything after the opening
-   is left to the model.
+3. Twelve fixed, made-up example pairs go with every request. Earlier tries also split "and ask …" on the phone
+   and dropped a "that" or a "with" after the opening; each changed what some sentence meant, so everything after
+   the opening is left to the model.
 4. A capital letter and a full stop are added by code (`oneMessage`), not asked of the model.

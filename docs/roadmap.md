@@ -24,7 +24,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | list built, on samples   |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
 | 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |
-| 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        | built; 91 of 96 on the real model |
+| 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        | built; 93 of 102 on the real model |
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
 | 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built but mute, samples  |
 | 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
