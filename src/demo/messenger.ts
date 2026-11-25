@@ -53,13 +53,18 @@ export const DEMO_PICKS: readonly string[] = ['anna', 'launch', 'news']
 
 export interface DemoMessenger extends Messenger {
   arrive(chat: string, from: string, text: string): Message
+  edit(message: Message, text: string): void
   sent(): readonly Message[]
+  saved(): readonly Message[]
+  drafts(): ReadonlyMap<string, string>
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   let serial = 0
   const listeners = new Set<() => void>()
   const outbox: Message[] = []
+  const kept: Message[] = []
+  const drafts = new Map<string, string>()
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
     chat,
@@ -67,6 +72,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     text,
     at,
     mine: from === 'You',
+    liked: false,
   })
   const started = now()
   const chats: DemoChat[] = SCRIPT.map(entry => ({
@@ -117,6 +123,25 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       chat.messages.splice(at, 1)
       tell()
     },
+    keep: async (id, text, signal) => {
+      signal.throwIfAborted()
+      find(id)
+      if (drafts.has(id)) return false
+      drafts.set(id, text)
+      return true
+    },
+    save: async message => {
+      const found = find(message.chat).messages.find(candidate => candidate.id === message.id)
+      if (!found) throw new Error('No such message')
+      kept.push(found)
+    },
+    like: async message => {
+      const chat = find(message.chat)
+      const at = chat.messages.findIndex(candidate => candidate.id === message.id)
+      if (at < 0) throw new Error('No such message')
+      chat.messages[at] = { ...chat.messages[at], liked: true }
+      tell()
+    },
     onChange: told => {
       listeners.add(told)
       return () => void listeners.delete(told)
@@ -129,6 +154,15 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       tell()
       return arrived
     },
+    edit: (message, text) => {
+      const chat = find(message.chat)
+      const at = chat.messages.findIndex(candidate => candidate.id === message.id)
+      if (at < 0) throw new Error('No such message')
+      chat.messages[at] = { ...chat.messages[at], text }
+      tell()
+    },
     sent: () => outbox,
+    saved: () => kept,
+    drafts: () => drafts,
   }
 }

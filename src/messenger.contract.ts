@@ -5,6 +5,7 @@ export interface ContractWorld {
   messenger: Messenger
   chat: string
   unreadChat: string
+  saved(): Promise<string[]>
 }
 
 export function messengerContract(name: string, make: () => Promise<ContractWorld>): void {
@@ -53,6 +54,47 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       const stop = messenger.onChange(() => told++)
       await messenger.unsend(sent)
       expect((await messenger.history(chat, 1))[0]?.id).toBe(before)
+      expect(told).toBeGreaterThan(0)
+      stop()
+    })
+
+    it('keeps a reply as the chat’s draft, but never over a draft that is already waiting', async () => {
+      const { messenger, chat } = await make()
+      const live = new AbortController().signal
+      expect(await messenger.keep(chat, 'See you at noon', live)).toBe(true)
+      expect(await messenger.keep(chat, 'Something else', live)).toBe(false)
+    })
+
+    it('keeps only the first of two replies kept for one chat at the same moment', async () => {
+      const { messenger, chat } = await make()
+      const live = new AbortController().signal
+      const kept = await Promise.all([messenger.keep(chat, 'First', live), messenger.keep(chat, 'Second', live)])
+      expect(kept).toEqual([true, false])
+    })
+
+    it('A4: keeps nothing for a caller that has already gone', async () => {
+      const { messenger, chat } = await make()
+      const gone = new AbortController()
+      gone.abort()
+      await expect(messenger.keep(chat, 'Too late', gone.signal)).rejects.toThrow()
+      expect(await messenger.keep(chat, 'In time', new AbortController().signal)).toBe(true)
+    })
+
+    it('copies a message to Saved Messages', async () => {
+      const { messenger, unreadChat, saved } = await make()
+      const newest = (await messenger.history(unreadChat, 3)).at(-1)!
+      await messenger.save(newest)
+      expect(await saved()).toEqual([newest.text])
+    })
+
+    it('likes a message, shows it as liked from then on, and tells listeners', async () => {
+      const { messenger, unreadChat } = await make()
+      const newest = (await messenger.history(unreadChat, 3)).at(-1)!
+      expect(newest.liked).toBe(false)
+      let told = 0
+      const stop = messenger.onChange(() => told++)
+      await messenger.like(newest)
+      expect((await messenger.history(unreadChat, 3)).at(-1)).toMatchObject({ id: newest.id, liked: true })
       expect(told).toBeGreaterThan(0)
       stop()
     })

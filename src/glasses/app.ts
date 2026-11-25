@@ -16,7 +16,6 @@ import {
   type Action,
   type Agent,
   type Box,
-  type Glasses,
   type Lifetime,
   type NavigatorModel,
   type Screen,
@@ -24,6 +23,7 @@ import {
   type VoiceOptions,
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
+import type { Display } from './display.ts'
 import type { Chat, Message, Messenger } from '../messenger.ts'
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
@@ -50,6 +50,7 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+const LIKED = '👍'
 // Earshot's list view keeps 20 px left of its rows for the cursor.
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
@@ -67,6 +68,17 @@ const WORDS = {
   tapToSend: 'Tap to send',
   sending: 'Sending…',
   sent: 'Sent',
+  keeping: 'Keeping…',
+  kept: 'Kept as a draft',
+  draftWaiting: 'Your phone already has a draft',
+  notKept: 'Could not keep it',
+  newestMessage: 'the top message from someone else',
+  nothingFromOthers: 'No message from someone else on screen',
+  liked: 'Liked',
+  alreadyLiked: 'Already liked',
+  notLiked: 'Could not like it',
+  saved: 'Saved',
+  notSaved: 'Could not save it',
   notSent: 'Not sent. Tap to try again',
   undo: 'Sent. Tap to undo',
   undone: 'Taken back',
@@ -83,8 +95,10 @@ const showable = (words: string) => {
 
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
 
-const line = (chat: Chat | undefined, message: Message) =>
-  message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
+const line = (chat: Chat | undefined, message: Message) => {
+  const text = message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
+  return message.liked ? `${text} ${LIKED}` : text
+}
 
 const page = (title: string, body: string, foot: string): Box[] => [
   { id: 'title', x: 0, y: 0, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: fitText(oneLine(title), SCREEN_WIDTH), brightness: DIM },
@@ -101,6 +115,7 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     redraw()
   }
   return {
+    top: at,
     shown: () =>
       lines()
         .slice(at(), at() + ROWS)
@@ -110,8 +125,10 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
   }
 }
 
-export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesParts): GlassesApp {
+export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {
   const { inbox, messenger, phrases, hearing } = parts
+  const { glasses, upToDate } = shown
+  const unseen = () => (upToDate() ? null : WORDS.loading)
   const sentIn = new Map<string, (message: Message) => void>()
   const chatOn = new WeakMap<Screen, { chat: string; covers: boolean }>()
   const choices = new WeakMap<Screen, () => Chat[]>()
@@ -125,14 +142,24 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     const words = showable(given)
     const lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
-    let state: 'ready' | 'sending' | 'failed' | 'sent' = 'ready'
+    let state: 'ready' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    const busy = () =>
+      state === 'sending'
+        ? WORDS.sending
+        : state === 'sent'
+          ? WORDS.sent
+          : state === 'keeping'
+            ? WORDS.keeping
+            : state === 'kept'
+              ? WORDS.kept
+              : null
     let screen: Lifetime | null = null
 
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
-      blocked: () => (state === 'sending' ? WORDS.sending : state === 'sent' ? WORDS.sent : null),
+      blocked: () => busy() ?? unseen(),
       run: async () => {
         if (!screen) return
         state = 'sending'
@@ -152,12 +179,41 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         sentIn.get(id)?.(sent)
       },
     })
-    const foot = () =>
-      state === 'sending' ? WORDS.sending : state === 'failed' ? WORDS.notSent : state === 'sent' ? WORDS.sent : WORDS.tapToSend
+    const keep = action({
+      id: 'keep',
+      say: 'Keep for later',
+      hint: 'Keeps the reply as a draft in Telegram, to finish on the phone',
+      risk: 'voice',
+      blocked: () => busy() ?? unseen(),
+      run: async () => {
+        if (!screen) return
+        const before = state
+        state = 'keeping'
+        redraw()
+        let kept: boolean
+        try {
+          kept = await life.guard(messenger.keep(id, words, life.signal))
+        } catch (error) {
+          if (error instanceof LifetimeEnded) return
+          state = before
+          shell.notice(WORDS.notKept)
+          return
+        }
+        if (!kept) {
+          state = before
+          shell.notice(WORDS.draftWaiting)
+          return
+        }
+        state = 'kept'
+        if (router.current === self) router.back()
+        shell.notice(WORDS.kept)
+      },
+    })
+    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
 
     const self: Screen = {
       id: `draft:${id}`,
-      actions: () => [send, scroll.down, scroll.up],
+      actions: () => [send, keep, scroll.down, scroll.up],
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
@@ -182,37 +238,65 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
     let failed = false
-    let seen: string | null | undefined
+    let started = 0
+    let readUpTo: string | null | undefined
+    let seenClear: string | null = null
+    let pending = false
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
 
-    const lines = (): readonly string[] => {
-      if (failed) return [WORDS.noLoad]
-      if (messages === null) return [WORDS.loading]
-      if (messages.length === 0) return [WORDS.noMessages]
+    const layout = (): { lines: string[]; blocks: { message: Message; from: number; to: number }[] } => {
+      if (failed) return { lines: [WORDS.noLoad], blocks: [] }
+      if (messages === null) return { lines: [WORDS.loading], blocks: [] }
+      if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [] }
       const chat = inbox.chat(id)
-      const newestFirst = [...messages].reverse().map(message => line(chat, message))
-      return wrapText(cleanText(newestFirst.join('\n\n')), SCREEN_WIDTH)
+      const lines: string[] = []
+      const blocks: { message: Message; from: number; to: number }[] = []
+      for (const message of [...messages].reverse()) {
+        if (lines.length) lines.push('')
+        const wrapped = wrapText(cleanText(line(chat, message)), SCREEN_WIDTH)
+        blocks.push({ message, from: lines.length, to: lines.length + wrapped.length })
+        lines.push(...wrapped)
+      }
+      return { lines, blocks }
     }
-    const scroll = scroller(lines, redraw)
+    const scroll = scroller(() => layout().lines, redraw)
+    const inView = (): Message[] => {
+      const top = scroll.top()
+      return layout()
+        .blocks.filter(block => block.from < top + ROWS && block.to > top)
+        .map(block => block.message)
+    }
 
     const load = async (entered: Lifetime) => {
-      seen = inbox.chat(id)?.last?.id ?? null
+      const turn = ++started
+      pending = true
       let loaded: Message[]
       try {
         loaded = await entered.guard(messenger.history(id, HISTORY))
       } catch (error) {
-        if (error instanceof LifetimeEnded) return
+        if (error instanceof LifetimeEnded || turn !== started) return
+        pending = false
         failed = true
         redraw()
         return
       }
+      if (turn !== started) return
+      pending = false
       messages = loaded
       failed = false
       redraw()
-      void entered.guard(messenger.read(id)).catch(() => {})
+      markRead(entered)
+    }
+    const markRead = (entered: Lifetime) => {
+      const newestId = messages?.at(-1)?.id ?? null
+      if (pending || failed || newestId === readUpTo || (inbox.chat(id)?.unread ?? 0) === 0) return
+      readUpTo = newestId
+      void entered.guard(messenger.read(id)).catch(() => {
+        if (readUpTo === newestId) readUpTo = undefined
+      })
     }
 
     const sent = (message: Message) => {
@@ -248,12 +332,84 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
+    const current = () => !pending && !failed && messages !== null
+    const keyOf = (message: Message) => `${message.id}\n${message.text}`
+    const inSight = () => (current() && upToDate() ? (inView().find(message => !message.mine) ?? null) : null)
+    const seen = (message: Message) => keyOf(message) === seenClear
+    const newest = () => {
+      const message = inSight()
+      return message && seen(message) ? message : null
+    }
+    const onNewest = (spec: {
+      id: string
+      say: string
+      hint: string
+      done: string
+      failed: string
+      refused?: (message: Message) => string | null
+      act: (message: Message) => Promise<void>
+    }) => {
+      let acting = false
+      const run = async (message: Message) => {
+        if (!screen || acting) return
+        const entered = screen
+        acting = true
+        try {
+          await entered.guard(spec.act(message))
+        } catch (error) {
+          acting = false
+          if (!(error instanceof LifetimeEnded)) shell.notice(spec.failed)
+          return
+        }
+        acting = false
+        shell.notice(spec.done)
+      }
+      return action<Message>({
+        id: spec.id,
+        say: spec.say,
+        hint: spec.hint,
+        risk: 'voice',
+        blocked: () => {
+          if (!current() || !upToDate()) return WORDS.loading
+          const message = inSight()
+          if (!message) return WORDS.nothingFromOthers
+          return seen(message) ? (spec.refused?.(message) ?? null) : WORDS.loading
+        },
+        targets: () => {
+          const message = newest()
+          return message ? [{ id: keyOf(message), say: WORDS.newestMessage, value: message }] : []
+        },
+        choose: () => {
+          const message = newest()
+          if (message) void run(message)
+        },
+        run,
+      })
+    }
+    const like = onNewest({
+      id: 'like',
+      say: 'Like',
+      hint: 'Sends a thumbs-up to the first message from someone else that is on screen',
+      done: WORDS.liked,
+      failed: WORDS.notLiked,
+      refused: message => (message.liked ? WORDS.alreadyLiked : null),
+      act: message => messenger.like(message),
+    })
+    const save = onNewest({
+      id: 'save',
+      say: 'Save',
+      hint: 'Copies the first message from someone else that is on screen to Saved Messages',
+      done: WORDS.saved,
+      failed: WORDS.notSaved,
+      act: message => messenger.save(message),
+    })
+
     const reply: Action = action<string>({
       id: 'reply',
       say: 'Reply',
       hint: 'Sends one short answer to the chat on screen',
       risk: 'voice',
-      blocked: () => (sending ? WORDS.sending : null),
+      blocked: () => (sending ? WORDS.sending : unseen()),
       targets: () => {
         const own = new Set(phrases.list())
         const newest = messages?.findLast(message => !message.mine)?.text ?? null
@@ -287,7 +443,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
 
     const self: Screen = {
       id: `chat:${id}`,
-      actions: () => [reply, takeBack, scroll.down, scroll.up],
+      actions: () => [reply, like, save, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
@@ -295,11 +451,14 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         entered.own(() => {
           if (sentIn.get(id) === sent) sentIn.delete(id)
         })
+        entered.own(messenger.onChange(() => void load(entered)))
         entered.own(
-          inbox.onChange(() => {
-            if ((inbox.chat(id)?.last?.id ?? null) !== seen) void load(entered)
+          shown.onClear(() => {
+            const message = inSight()
+            seenClear = message ? keyOf(message) : null
           }),
         )
+        entered.own(inbox.onChange(() => markRead(entered)))
         void load(entered)
       },
       view: () =>
@@ -459,6 +618,12 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
           },
         }
       : {},
+  )
+  life.own(() => router.close())
+  life.own(
+    shown.onUncover(() => {
+      void Promise.resolve().then(redraw)
+    }),
   )
   life.own(inbox.onChange(redraw))
   life.own(phrases.onChange(redraw))

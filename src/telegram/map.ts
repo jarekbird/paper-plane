@@ -16,13 +16,17 @@ export interface MessageLike {
   chat: PeerLike
   sender: { displayName: string }
   media: { type: string } | null
+  reactions: { reactions: readonly { emoji: unknown; order: number | null }[] } | null
 }
 
 export interface DialogLike {
   peer: PeerLike
   unreadCount: number
   lastMessage: MessageLike | null
+  draftMessage: { text: string } | null
 }
+
+export const LIKE = '👍'
 
 const MEDIA: Record<string, string> = {
   photo: 'Photo',
@@ -50,6 +54,7 @@ export function toMessage(message: MessageLike): Message {
     text: [media, message.text].filter(Boolean).join(' '),
     at: message.date.getTime(),
     mine: message.isOutgoing,
+    liked: message.reactions?.reactions.some(reaction => reaction.emoji === LIKE && reaction.order !== null) ?? false,
   }
 }
 

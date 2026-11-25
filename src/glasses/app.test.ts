@@ -1,10 +1,11 @@
-import { createStore, Glasses, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech, type NavigatorModel, type Question } from 'earshot'
+import { createStore, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech, type NavigatorModel, type Question } from 'earshot'
 import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoMessenger } from '../demo/messenger.ts'
 import { Inbox } from '../inbox.ts'
 import { Phrases } from '../phrases.ts'
 import { startGlasses } from './app.ts'
+import { display } from './display.ts'
 
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
 const tone = (ms: number) => new Uint8Array(new Int16Array((ms / 1000) * SAMPLE_RATE).map((_, at) => 8_000 * Math.sin(at / 5)).buffer)
@@ -25,7 +26,7 @@ async function world(picks: string[], said: string[] = [], own: string[] = [], m
     await gate.wait
     return send(chat, text)
   }
-  const app = startGlasses(life, new Glasses(life, fake.bridge), {
+  const app = startGlasses(life, display(life, fake.bridge), {
     inbox,
     messenger,
     phrases,
@@ -80,6 +81,16 @@ describe('the list of chats', () => {
 })
 
 describe('a chat', () => {
+  it('is marked read only when it has something new, so opening it does not keep asking Telegram', async () => {
+    const { messenger, openFirst } = await world(['sam'])
+    const read = vi.spyOn(messenger, 'read')
+    const history = vi.spyOn(messenger, 'history')
+    await openFirst()
+    await settle(5_000)
+    expect(read).not.toHaveBeenCalled()
+    expect(history).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the newest message first, says how to answer, and marks the chat read once it is shown', async () => {
     const { fake, unread, openFirst } = await world(['anna'])
     await openFirst()
@@ -91,10 +102,36 @@ describe('a chat', () => {
     expect(fake.lines()).toEqual(['Paper Plane', '> Anna'])
   })
 
+  it('is marked read once, also when Telegram reports the read itself and the list of chats is slow to refresh', async () => {
+    const { messenger, openFirst } = await world(['anna'])
+    const mine = (await messenger.history('anna', 6)).find(message => message.mine)!
+    const read = messenger.read
+    let reads = 0
+    messenger.read = async chat => {
+      reads++
+      await read(chat)
+      messenger.edit(mine, mine.text)
+    }
+    const history = vi.spyOn(messenger, 'history')
+    messenger.chats = () => new Promise(() => {})
+    await openFirst()
+    await settle(5_000)
+    expect(reads).toBe(1)
+    expect(history.mock.calls.length).toBeLessThanOrEqual(3)
+  })
+
   it('names who wrote each message in a group', async () => {
     const { fake, openFirst } = await world(['launch'])
     await openFirst()
     expect(fake.lines()[1]).toBe('Cy: Can someone confirm the demo time for Thursday?')
+  })
+
+  it('marks a message read that arrives while the chat is open', async () => {
+    const { messenger, unread, openFirst } = await world(['anna'])
+    await openFirst()
+    messenger.arrive('anna', 'Anna', 'Or one, if that is easier.')
+    await settle()
+    expect(await unread('anna')).toBe(0)
   })
 
   it('shows a message that arrives while the chat is open', async () => {
@@ -222,10 +259,25 @@ describe('a short answer', () => {
     await settle()
     expect(sent()).toEqual([])
     fake.down()
+    await settle()
     fake.tap()
     await settle()
     expect(sent()).toEqual([['anna', 'No']])
     expect(router.current.id).toBe('chat:anna')
+  })
+
+  it('S5: is not sent by a tap that comes before the glasses have drawn which row is chosen', async () => {
+    const { fake, sent, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.tap()
+    await settle()
+    fake.down()
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([])
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', 'Thanks']])
   })
 
   it('lists the user’s own phrases after the fixed answers', async () => {
@@ -608,5 +660,404 @@ describe('by voice, from any screen', () => {
     expect(fake.lines()).toEqual(['To Anna', 'tell me when you arrive', 'Tap to send'])
     expect(router.depth).toBe(3)
     expect(sent()).toEqual([])
+  })
+})
+
+describe('a reply kept for later', () => {
+  it('becomes the chat’s draft in Telegram, exactly as shown, and the chat comes back', async () => {
+    const { fake, say, router, sent, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+    expect(router.current.id).toBe('chat:anna')
+    expect(fake.overlay()).toContain('Kept as a draft')
+    expect(sent()).toEqual([])
+  })
+
+  it('never replaces a draft that is already waiting on the phone', async () => {
+    const { fake, say, router, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    await messenger.keep('anna', 'typed on the phone', new AbortController().signal)
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('typed on the phone')
+    expect(router.current.id).toBe('draft:anna')
+    expect(fake.overlay()).toContain('Your phone already has a draft')
+  })
+
+  it('S5: asks for a tap first when keeping is said', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty', 'keep for later'])
+    await openFirst()
+    await say()
+    await say()
+    expect(messenger.drafts().size).toBe(0)
+    expect(fake.overlay()).toContain('Tap to confirm')
+    fake.tap()
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+  })
+
+  it('cannot be sent as well once it is kept', async () => {
+    const { fake, say, sent, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = messenger.keep
+    messenger.keep = async (chat, text, signal) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text, signal)
+    }
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    fake.tap()
+    await settle()
+    release()
+    await settle()
+    expect(sent()).toEqual([])
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+  })
+})
+
+describe('a reply kept for later, when the user moves on', () => {
+  it('is still kept when the user leaves the reply before Telegram has answered, and says so', async () => {
+    const { fake, say, router, messenger, openFirst } = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = messenger.keep
+    messenger.keep = async (chat, text, signal) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text, signal)
+    }
+    await openFirst()
+    await say()
+    fake.pick('Keep for later')
+    await settle()
+    fake.double()
+    await settle()
+    expect(router.current.id).toBe('chat:anna')
+    release()
+    await settle()
+    expect(messenger.drafts().get('anna')).toBe('see you at twelve thirty')
+    expect(router.current.id).toBe('chat:anna')
+    expect(fake.overlay()).toContain('Kept as a draft')
+  })
+
+  it('A4: is not kept, and nothing is said, once the app has ended', async () => {
+    const w = await world(['anna'], ['see you at twelve thirty'])
+    let release = () => {}
+    const keep = w.messenger.keep
+    w.messenger.keep = async (chat, text, signal) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return keep(chat, text, signal)
+    }
+    await w.openFirst()
+    await w.say()
+    w.fake.pick('Keep for later')
+    await settle()
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.life.end()
+    release()
+    await settle()
+    expect(w.messenger.drafts().size).toBe(0)
+    expect(noticed).not.toHaveBeenCalled()
+  })
+})
+
+describe('the newest message from someone else', () => {
+  const NEWEST = 'I can do 12:30 at the usual place.'
+
+  it('is liked by a pick in the menu, and shows it', async () => {
+    const { fake, texts, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Like')
+    await settle()
+    expect((await messenger.history('anna', 6)).filter(message => message.liked).map(message => message.text)).toEqual([NEWEST])
+    expect(fake.lines()[1]).toBe(`${NEWEST} 👍`)
+    expect(fake.overlay()).toContain('Liked')
+    expect(await texts('anna')).toHaveLength(3)
+  })
+
+  it('S5, A5: liked by voice, asks for a tap, and nothing is liked if a newer message arrived meanwhile', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['like that'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    fake.tap()
+    await settle()
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('A5: is not liked by a tap that comes while a newer message is still loading', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['like that'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    const history = messenger.history
+    let release = () => {}
+    messenger.history = async (chat, limit) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return history(chat, limit)
+    }
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    fake.tap()
+    await settle()
+    messenger.history = history
+    release()
+    await settle()
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('S5: is not liked or saved when it is not on screen, after six of the user’s own replies', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    for (let n = 1; n <= 6; n++) await messenger.send('sam', `Reply ${n}`)
+    await openFirst()
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('No message from someone else on screen')
+    fake.pick('Save')
+    await settle()
+    expect((await messenger.history('sam', 10)).some(message => message.liked)).toBe(false)
+    expect(messenger.saved()).toEqual([])
+  })
+
+  it('S5: is not liked or saved while a long reply of the user’s own hides it, and is once the user scrolls to it', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    await messenger.send('sam', Array.from({ length: 30 }, (_, n) => `This is sentence ${n + 1} of one long reply.`).join(' '))
+    await openFirst()
+    expect(fake.lines().join(' ')).not.toContain('Thanks for yesterday.')
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('No message from someone else on screen')
+    fake.pick('Save')
+    await settle(5_000)
+    expect((await messenger.history('sam', 10)).some(message => message.liked)).toBe(false)
+    expect(messenger.saved()).toEqual([])
+    for (let swipe = 0; swipe < 30 && !fake.lines().join(' ').includes('Thanks for yesterday.'); swipe++) {
+      fake.down()
+      await settle()
+    }
+    fake.pick('Like')
+    await settle()
+    expect((await messenger.history('sam', 10)).filter(message => message.liked).map(message => message.text)).toEqual([
+      'Thanks for yesterday.',
+    ])
+  })
+
+  it('likes the first message from someone else that is in view after scrolling, not a newer one above it', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    for (let n = 1; n <= 5; n++) messenger.arrive('sam', 'Sam', `Note ${n}`)
+    messenger.arrive('sam', 'Sam', Array.from({ length: 30 }, (_, n) => `Sentence ${n + 1} of a long message from Sam.`).join(' '))
+    await settle()
+    await openFirst()
+    let before = ''
+    for (let swipe = 0; swipe < 40 && fake.lines().join('|') !== before; swipe++) {
+      before = fake.lines().join('|')
+      fake.down()
+      await settle()
+    }
+    await settle(5_000)
+    expect(fake.lines().join(' ')).not.toContain('long message from Sam')
+    const top = fake.lines().find(shown => shown.startsWith('Note'))
+    fake.pick('Like')
+    await settle()
+    const liked = (await messenger.history('sam', 10)).filter(message => message.liked).map(message => message.text)
+    expect(liked).toEqual([top])
+    expect(liked).not.toEqual(['Note 5'])
+  })
+
+  it('A5: is not liked from an old view after a newer message failed to load', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    messenger.history = async () => {
+      throw new Error('offline')
+    }
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    expect(fake.lines()[1]).toBe('Could not load this chat')
+    fake.pick('Like')
+    await settle()
+    messenger.history = history
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('A5: shows the newest history when an older load answers last', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    const waiting: (() => void)[] = []
+    messenger.history = async (chat, limit) => {
+      const answer = await history(chat, limit)
+      await new Promise<void>(resolve => waiting.push(resolve))
+      return answer
+    }
+    messenger.arrive('anna', 'Anna', 'First of two')
+    await settle()
+    messenger.arrive('anna', 'Anna', 'Second of two')
+    await settle()
+    expect(waiting).toHaveLength(2)
+    waiting[1]()
+    await settle()
+    waiting[0]()
+    await settle()
+    expect(fake.lines()[1]).toBe('Second of two')
+  })
+
+  it('shows the new text when it is edited, and saves what is shown', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const newest = (await messenger.history('anna', 1))[0]
+    messenger.edit(newest, 'I can do 1:30 instead.')
+    await settle()
+    expect(fake.lines()[1]).toBe('I can do 1:30 instead.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual(['I can do 1:30 instead.'])
+  })
+
+  it('S5: is not saved when it is edited between the spoken command and the tap', async () => {
+    const { fake, say, messenger, openFirst } = await world(['anna'], ['save this'])
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    await settle()
+    fake.tap()
+    await settle()
+    expect(messenger.saved()).toEqual([])
+  })
+
+  it('S5: is not saved from the old text while the edited one is still loading', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    let release = () => {}
+    messenger.history = async (chat, limit) => {
+      await new Promise<void>(resolve => (release = resolve))
+      return history(chat, limit)
+    }
+    messenger.edit((await history('anna', 1))[0], 'Send 500 to this account.')
+    await settle()
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toEqual([])
+    messenger.history = history
+    release()
+    await settle()
+  })
+
+  it('S5: is not saved from the old text when it is edited and the list of chats is still refreshing', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const chats = messenger.chats
+    let release = () => {}
+    messenger.chats = async () => {
+      await new Promise<void>(resolve => (release = resolve))
+      return chats()
+    }
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toEqual([])
+    messenger.chats = chats
+    release()
+    await settle()
+  })
+
+  it('S5: is not saved while the glasses have not yet drawn its edited text', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.refuse('update', 1)
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    await settle(100)
+    expect(fake.lines()[1]).toBe('I can do 12:30 at the usual place.')
+    fake.pick('Save')
+    await settle(100)
+    expect(messenger.saved()).toEqual([])
+    await settle(3_000)
+    expect(fake.lines()[1]).toBe('Send 500 to this account.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual(['Send 500 to this account.'])
+  })
+
+  it('S5: is not saved when its ending is edited under a notice that covers it', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    const long = Array.from({ length: 8 }, (_, n) => `Line ${n + 1} of the plan.`).join('\n')
+    const arrived = messenger.arrive('sam', 'Sam', long)
+    await settle()
+    await openFirst()
+    fake.pick('Save')
+    await settle(100)
+    expect(fake.overlay()).toContain('Saved')
+    messenger.edit(arrived, long.replace('Line 8 of the plan.', 'Line 8: send 500 to this account.'))
+    await settle(100)
+    expect(fake.overlay()).toContain('Saved')
+    fake.pick('Save')
+    await settle(100)
+    expect(messenger.saved()).toHaveLength(1)
+    await settle(8_000)
+    expect(fake.overlay()).toBe('')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text.includes('send 500'))).toEqual([false, true])
+  })
+
+  it('can be liked right after it was saved, while the notice is still up, when nothing changed', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Save')
+    await settle(100)
+    expect(fake.overlay()).toContain('Saved')
+    fake.pick('Like')
+    await settle(100)
+    expect((await messenger.history('anna', 6)).filter(message => message.liked)).toHaveLength(1)
+  })
+
+  it('is not liked twice', async () => {
+    const { fake, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Like')
+    await settle(5_000)
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('Already liked')
+  })
+
+  it('is copied to Saved Messages by a pick in the menu', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved().map(message => message.text)).toEqual([NEWEST])
+    expect(fake.overlay()).toContain('Saved')
+  })
+
+  it('is saved once when the menu is picked twice in a row', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    fake.pick('Save')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toHaveLength(1)
+  })
+
+  it('A4: says nothing on glasses that are gone when the app ends while a like is on its way', async () => {
+    const w = await world(['anna'])
+    let fail = (_: Error) => {}
+    w.messenger.like = () => new Promise<void>((_, reject) => (fail = reject))
+    await w.openFirst()
+    const noticed = vi.spyOn(w.shell, 'notice')
+    w.fake.pick('Like')
+    await settle()
+    w.life.end()
+    fail(new Error('offline'))
+    await settle()
+    expect(noticed).not.toHaveBeenCalled()
   })
 })

@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { messengerContract } from '../messenger.contract.ts'
 import { DEMO_PICKS, demoMessenger } from './messenger.ts'
 
-messengerContract('the sample account', async () => ({
-  messenger: demoMessenger(() => 1_700_000_000_000),
-  chat: 'sam',
-  unreadChat: 'anna',
-}))
+messengerContract('the sample account', async () => {
+  const messenger = demoMessenger(() => 1_700_000_000_000)
+  return { messenger, chat: 'sam', unreadChat: 'anna', saved: async () => messenger.saved().map(message => message.text) }
+})
 
 describe('the sample account', () => {
   it('starts with picks that exist, so a first launch shows chats', async () => {

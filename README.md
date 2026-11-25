@@ -16,6 +16,8 @@ you say into a message), in one flow.
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
 | A short answer without speaking      | Tap the chat, pick Yes, No or one of your own phrases, tap         |
 | A message taken back                 | "Sent. Tap to undo" for five seconds                               |
+| A reply kept for later               | Menu > Keep for later: it becomes the chat's draft in Telegram     |
+| A thumbs-up, or a message saved      | Menu > Like, or Save (to Saved Messages); or say "like that"       |
 | Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
