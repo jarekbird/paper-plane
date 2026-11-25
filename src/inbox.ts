@@ -1,7 +1,8 @@
-import type { Lifetime, Store } from 'earshot'
+import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
 import type { Chat, Messenger } from './messenger.ts'
 
 export class Inbox {
+  readonly #life: Lifetime
   readonly #messenger: Messenger
   readonly #store: Store
   readonly #key: string
@@ -13,6 +14,7 @@ export class Inbox {
   #problem: string | null = null
 
   constructor(life: Lifetime, messenger: Messenger, store: Store, owner = 'sample') {
+    this.#life = life
     this.#messenger = messenger
     this.#store = store
     this.#key = `picks:${owner}`
@@ -62,6 +64,7 @@ export class Inbox {
   }
 
   refresh(): Promise<void> {
+    if (this.#life.ended) return Promise.resolve()
     if (this.#loading) {
       this.#again = true
       return this.#loading
@@ -77,9 +80,10 @@ export class Inbox {
 
   async #load(): Promise<void> {
     try {
-      this.#chats = await this.#messenger.chats()
+      this.#chats = await this.#life.guard(this.#messenger.chats())
       this.#problem = null
-    } catch {
+    } catch (error) {
+      if (error instanceof LifetimeEnded) return
       this.#problem = 'Telegram is not answering'
     }
     this.#tell()

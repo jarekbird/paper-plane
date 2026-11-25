@@ -1,18 +1,14 @@
 import type { Lifetime } from 'earshot'
-import { MemoryStorage, TelegramClient } from '@mtcute/web'
+import { TelegramClient } from '@mtcute/web'
 import type { Account, Messenger } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 import { messengerOver, type ClientLike } from './messenger.ts'
-
-export interface TelegramApp {
-  apiId: number
-  apiHash: string
-}
+import { clientOptions, type TelegramApp } from './options.ts'
 
 type Heard = (update: { name: string }) => void
 
 export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace): { account: Account; messenger: Messenger } {
-  const make = () => new TelegramClient({ apiId: app.apiId, apiHash: app.apiHash, storage: new MemoryStorage() })
+  const make = () => new TelegramClient(clientOptions(app))
   const heard = new Set<Heard>()
   let current = make()
 
