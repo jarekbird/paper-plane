@@ -32,7 +32,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
 | 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    |                          |
-| 14  | Privacy screen: what leaves the phone, in plain words                                                      |                          |
+| 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
 | 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              |                          |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
 | 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               |                          |
