@@ -240,6 +240,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let failed = false
     let started = 0
     let readUpTo: string | null | undefined
+    let seenClear: string | null = null
     let pending = false
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
@@ -332,7 +333,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     })
 
     const current = () => !pending && !failed && messages !== null
-    const newest = () => (current() && upToDate() ? (inView().find(message => !message.mine) ?? null) : null)
+    const keyOf = (message: Message) => `${message.id}\n${message.text}`
+    const inSight = () => (current() && upToDate() ? (inView().find(message => !message.mine) ?? null) : null)
+    const seen = (message: Message) => keyOf(message) === seenClear
+    const newest = () => {
+      const message = inSight()
+      return message && seen(message) ? message : null
+    }
     const onNewest = (spec: {
       id: string
       say: string
@@ -364,12 +371,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         risk: 'voice',
         blocked: () => {
           if (!current() || !upToDate()) return WORDS.loading
-          const message = newest()
-          return message ? (spec.refused?.(message) ?? null) : WORDS.nothingFromOthers
+          const message = inSight()
+          if (!message) return WORDS.nothingFromOthers
+          return seen(message) ? (spec.refused?.(message) ?? null) : WORDS.loading
         },
         targets: () => {
           const message = newest()
-          return message ? [{ id: `${message.id}\n${message.text}`, say: WORDS.newestMessage, value: message }] : []
+          return message ? [{ id: keyOf(message), say: WORDS.newestMessage, value: message }] : []
         },
         choose: () => {
           const message = newest()
@@ -444,6 +452,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           if (sentIn.get(id) === sent) sentIn.delete(id)
         })
         entered.own(messenger.onChange(() => void load(entered)))
+        entered.own(
+          shown.onClear(() => {
+            const message = inSight()
+            seenClear = message ? keyOf(message) : null
+          }),
+        )
         entered.own(inbox.onChange(() => markRead(entered)))
         void load(entered)
       },
@@ -606,6 +620,11 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       : {},
   )
   life.own(() => router.close())
+  life.own(
+    shown.onUncover(() => {
+      void Promise.resolve().then(redraw)
+    }),
+  )
   life.own(inbox.onChange(redraw))
   life.own(phrases.onChange(redraw))
 
