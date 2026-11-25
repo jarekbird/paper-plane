@@ -1,5 +1,5 @@
 import { Lifetime } from 'earshot'
-import { tl } from '@mtcute/web'
+import { tl } from '@mtcute/core'
 import { describe, expect, it } from 'vitest'
 import { accountContract } from '../account.contract.ts'
 import { SignInError } from '../messenger.ts'

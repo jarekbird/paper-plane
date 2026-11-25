@@ -1,5 +1,5 @@
 import { LifetimeEnded, type Lifetime } from 'earshot'
-import { tl } from '@mtcute/web'
+import { tl } from '@mtcute/core'
 import { SignInError, type Account, type SignInProblem, type Who } from '../messenger.ts'
 
 export interface SessionPlace {
