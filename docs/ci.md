@@ -23,10 +23,22 @@ this page keeps an unchecked commit off `main`.
 
 ## Shipping
 
-Not set up: t3-g2's skill `ship` and its scripts are not ported. Nothing is packed for or uploaded to the Even Hub
-by CI or by an agent. Telegram's app id is injected at pack time and never committed (S3), so packing waits for that
-step to be designed.
+By hand, from Tower, and only when Jarek says "ship": nothing is uploaded to the Even Hub by CI or by an agent on its
+own. `evenhub` is signed in on Tower only.
+
+1. In a clean checkout of `origin/main`, with `.env.local` holding `VITE_RELAY` and, once there is one, Telegram's
+   app id (`VITE_TELEGRAM_API_ID`, `VITE_TELEGRAM_API_HASH`; never committed, S3): `npm ci`, `npm run check`.
+2. Set the next version in `app.json` and `package.json`.
+3. `npm run pack`: builds, runs the store check on that very build, and writes `build/paper-plane.ehpk`. Its last
+   line says whether the pack has Telegram and voice in it.
+4. The first time, `npx evenhub create build/paper-plane.ehpk --name "Paper Plane" --tagline "<one line>"` makes the
+   app on the Even Hub. After that, `npx evenhub upload build/paper-plane.ehpk -m "<what is new>"`. Then
+   `npx evenhub promote <version> --to beta`.
+5. Tag `v<version>` on the commit and push the tag.
 
 ## The Worker
 
-`worker/` is not built. CI never deploys it and never reaches it; its deployment gets a section here when it exists.
+`worker/` is Earshot's relay as the Cloudflare Worker `paper-plane-relay`. CI never deploys it and never reaches
+it. It is deployed by hand from a clean checkout of `origin/main`: `npx wrangler deploy --config
+worker/wrangler.toml`, with the Cloudflare token in the environment; the OpenRouter key is its secret
+`OPENROUTER_KEY` and is nowhere else (S3).
