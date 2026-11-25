@@ -4,6 +4,7 @@ import type { Display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
 import type { Account, Messenger, Who, Writer } from './messenger.ts'
 import type { PhoneParts } from './phone/page.ts'
+import type { Build } from './phone/privacy.ts'
 import { SignIn } from './phone/signin.ts'
 import { Phrases } from './phrases.ts'
 
@@ -17,6 +18,7 @@ export interface AppParts {
   telegram?: { account: Account; messenger: Messenger }
   hearing?: Hearing
   writer?: Writer
+  build?: Build
   phone?: (session: Lifetime, parts: PhoneParts) => void
 }
 
@@ -36,6 +38,7 @@ const SAMPLE_TITLE = 'Sample chats'
 
 export async function startApp(parts: AppParts): Promise<App> {
   const { life, display, store, sample, telegram, hearing, writer, phone } = parts
+  const build = parts.build ?? { telegram: false, voice: false }
   const phrases = new Phrases(store)
   await life.guard(phrases.start())
   let session = life.child()
@@ -48,7 +51,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     scope = 'connecting'
     inbox = null
     startWaiting(session, display, NOTES.connecting)
-    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.connecting })
+    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.connecting, build })
   }
 
   const show = (who: Who | null) => {
@@ -67,7 +70,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       ...(hearing ? { hearing } : {}),
       ...(writer ? { writer } : {}),
     })
-    phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope] })
+    phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope], build })
     const fill = async () => {
       await current.guard(opened.start())
       if (!who && opened.fresh) await current.guard(opened.pick(sample.picks))
@@ -93,7 +96,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     scope = 'offline'
     inbox = null
     startWaiting(session, display, NOTES.offline, () => void retry(model))
-    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.offline })
+    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.offline, build })
   }
 
   const retry = async (model: SignIn) => {

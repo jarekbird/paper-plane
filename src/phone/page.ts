@@ -2,6 +2,7 @@ import type { Lifetime } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Phrases } from '../phrases.ts'
 import { pickRows, setPicked } from './model.ts'
+import { whatLeaves, type Build } from './privacy.ts'
 import type { SignIn } from './signin.ts'
 
 export interface PhoneParts {
@@ -9,6 +10,7 @@ export interface PhoneParts {
   phrases: Phrases
   signIn: SignIn | null
   note: string
+  build: Build
 }
 
 const element = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): HTMLElementTagNameMap[K] => {
@@ -21,6 +23,10 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
   const { phrases, signIn, note } = parts
   const account = element('section')
   let accountRows = life.child()
+  const privacy = element('section')
+  privacy.className = 'privacy'
+  privacy.append(element('h2', 'What leaves this phone'))
+  for (const line of whatLeaves(parts.build)) privacy.append(element('h3', line.heading), element('p', line.text))
 
   const field = (type: string, placeholder: string, autocomplete: AutoFill, numeric = false) => {
     const input = element('input')
@@ -97,7 +103,7 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
   if (signIn) life.own(signIn.onChange(drawAccount))
   drawAccount()
   if (!parts.inbox) {
-    root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note))
+    root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), privacy)
     return
   }
   const inbox = parts.inbox
@@ -160,7 +166,7 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
     )
   }
 
-  root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), chats, answers)
+  root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), chats, answers, privacy)
   life.own(inbox.onChange(drawChats))
   life.own(phrases.onChange(drawAnswers))
   drawChats()

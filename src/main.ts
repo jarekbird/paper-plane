@@ -38,5 +38,6 @@ await startApp({
   ...(own ? { telegram: own } : {}),
   ...(hearing ? { hearing } : {}),
   ...(writer ? { writer } : {}),
+  build: { telegram: how.own === 'telegram', voice: Boolean(relay) && !how.said },
   phone: (session, parts) => startPhone(session, document.getElementById('app')!, parts),
 })

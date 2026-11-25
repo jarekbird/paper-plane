@@ -22,7 +22,7 @@ you say into a message), in one flow.
 | Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
-sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds.
+sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds. What leaves the phone, in plain words: [PRIVACY.md](PRIVACY.md), and the same on the app's phone page.
 
 ### State
 
