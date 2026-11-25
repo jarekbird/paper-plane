@@ -19,10 +19,11 @@ const PERSON = '(?:her|him|them|everyone|everybody)'
 export const TELL = 'Tell them: '
 export const ASK = 'Ask them: '
 const LEADS: [RegExp, string][] = [
-  [new RegExp(`^\\s*let\\s+${PERSON}\\s+know\\s+(?:that\\s+)?`, 'i'), TELL],
-  [new RegExp(`^\\s*tell\\s+${PERSON}\\s+(?:that\\s+)?`, 'i'), TELL],
+  [new RegExp(`^\\s*let\\s+${PERSON}\\s+know\\s+`, 'i'), TELL],
+  [new RegExp(`^\\s*tell\\s+${PERSON}\\s+`, 'i'), TELL],
   [new RegExp(`^\\s*ask\\s+${PERSON}\\s+`, 'i'), ASK],
-  [/^\s*(?:say|reply|answer|respond)\s+(?:(?:that|with)\s+)?/i, TELL],
+  [/^\s*(?:reply|answer|respond)\s+with\s+/i, TELL],
+  [/^\s*(?:say|reply|answer|respond)\s+/i, TELL],
 ]
 export function noteOf(words: string): string {
   const said = words.replace(/\s+/g, ' ').trim()

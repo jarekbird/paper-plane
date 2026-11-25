@@ -3,7 +3,10 @@ import type { Writer } from '../messenger.ts'
 
 const QUESTION = /\s+and\s+ask\s+(?=(?:where|what|when|who|why|how|if|whether|which)\b)/i
 const sentence = (part: string, asked: boolean) => {
-  const text = (asked ? part.replace(/^(?:if|whether)\s+/i, '') : part).trim().replace(/[.?!]+$/, '')
+  const text = part
+    .replace(asked ? /^(?:if|whether)\s+/i : /^that\s+(?=(?:I|we|he|she|they|it|you)\b)/i, '')
+    .trim()
+    .replace(/[.?!]+$/, '')
   return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}${asked ? '?' : '.'}` : ''
 }
 

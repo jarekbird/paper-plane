@@ -42,9 +42,9 @@ describe('the note a writer is given: who the message is for, worked out on the 
   it('names the person in the chat "them" and drops the telling, so a model cannot take them for someone else', () => {
     expect(noteOf('tell her yes and ask where')).toBe('Tell them: yes and ask where')
     expect(noteOf('Tell everyone the demo moved to four')).toBe('Tell them: the demo moved to four')
-    expect(noteOf('let him know that I got the keys')).toBe('Tell them: I got the keys')
+    expect(noteOf('let him know I got the keys')).toBe('Tell them: I got the keys')
     expect(noteOf('ask them if Thursday still works')).toBe('Ask them: if Thursday still works')
-    expect(noteOf('reply that I will call tonight')).toBe('Tell them: I will call tonight')
+    expect(noteOf('respond with thanks and see you there')).toBe('Tell them: thanks and see you there')
     expect(noteOf('answer no, not this week')).toBe('Tell them: no, not this week')
   })
 
@@ -52,6 +52,13 @@ describe('the note a writer is given: who the message is for, worked out on the 
     expect(noteOf('tell her I will call Sam and ask him if he can help')).toBe('Tell them: I will call Sam and ask him if he can help')
     expect(noteOf('tell her I will tell Sam and ask Robin tomorrow')).toBe('Tell them: I will tell Sam and ask Robin tomorrow')
     expect(noteOf('say yes and ask him what time')).toBe('Tell them: yes and ask him what time')
+  })
+
+  it('keeps a "that" after the opening: it may be the first word of the message', () => {
+    expect(noteOf('tell her that and the blue one are mine')).toBe('Tell them: that and the blue one are mine')
+    expect(noteOf('reply that works for me')).toBe('Tell them: that works for me')
+    expect(noteOf('let him know that I got the keys')).toBe('Tell them: that I got the keys')
+    expect(noteOf('say that I will call tonight')).toBe('Tell them: that I will call tonight')
   })
 
   it('takes any other words whole, as what to tell them', () => {
