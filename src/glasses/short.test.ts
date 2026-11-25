@@ -168,6 +168,69 @@ describe('say it short: an instruction becomes a message', () => {
   })
 })
 
+describe('say it short: a written message and the voice', () => {
+  it('S5: is not sent by saying "send": the glasses ask for a tap, and only the tap sends', async () => {
+    const { writer, asked } = slowWriter()
+    const { fake, say, open, sent } = await world(['tell her yes and ask where', 'send'], { writer })
+    await open()
+    await say()
+    asked[0].answer('Yes! Where should we meet?')
+    await settle(2_500)
+    await say()
+    expect(sent()).toEqual([])
+    expect(fake.overlay()).toContain('Tap to confirm')
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', 'Yes! Where should we meet?']])
+  })
+
+  it('S5: asks for the same tap when the reply is the user’s own words', async () => {
+    const { fake, say, open, sent } = await world(['see you at noon', 'send'])
+    await open()
+    await say()
+    await settle(2_500)
+    await say()
+    expect(sent()).toEqual([])
+    expect(fake.overlay()).toContain('Tap to confirm')
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', 'see you at noon']])
+  })
+})
+
+describe('say it short: a long message starts at its beginning', () => {
+  const longSaid = `tell her ${Array.from({ length: 150 }, (_, n) => `word${n}`).join(' ')}`
+  const longWritten = Array.from({ length: 80 }, (_, n) => `Line${n}`).join(' ')
+
+  it('shows the written message from its first line, even when the words were scrolled while it was written', async () => {
+    const { writer, asked } = slowWriter()
+    const { fake, say, open } = await world([longSaid], { writer })
+    await open()
+    await say()
+    fake.down()
+    await settle()
+    expect(fake.lines()[1]).not.toMatch(/^tell her/)
+    asked[0].answer(longWritten)
+    await settle()
+    expect(fake.lines()[1]).toMatch(/^Line0 /)
+  })
+
+  it('shows the words as said from their first line after the written message was scrolled', async () => {
+    const { writer, asked } = slowWriter()
+    const { fake, say, open } = await world([longSaid], { writer })
+    await open()
+    await say()
+    asked[0].answer(longWritten)
+    await settle()
+    fake.down()
+    await settle()
+    expect(fake.lines()[1]).not.toMatch(/^Line0 /)
+    fake.pick('As I said it')
+    await settle()
+    expect(fake.lines()[1]).toMatch(/^tell her/)
+  })
+})
+
 describe('say it short: when the writer does not help', () => {
   it('keeps the words as said, says so, and a tap sends them', async () => {
     const { writer, asked } = slowWriter()
@@ -253,7 +316,7 @@ describe('say it short: the user stays in charge of the words', () => {
   it('never rewrites one of the user’s own phrases, even one that reads like an instruction', async () => {
     const phrase = 'Tell her I am in a meeting until three and will call right after it ends, thanks'
     const { writer, asked } = slowWriter()
-    const { fake, open } = await world([], { writer, own: [phrase] })
+    const { fake, open, menu } = await world([], { writer, own: [phrase] })
     await open()
     fake.tap()
     await settle()
@@ -265,7 +328,20 @@ describe('say it short: the user stays in charge of the words', () => {
     await settle()
     expect(fake.lines()[0]).toBe('To Anna')
     expect(fake.lines().slice(1, -1).join(' ')).toBe(phrase)
+    expect(menu()).not.toContain('Write it out')
+    expect(menu()).not.toContain('As I said it')
     expect(fake.lines().at(-1)).toBe('Tap to send')
+    expect(asked).toEqual([])
+  })
+
+  it('S1: offers to write out only what was heard in a hold, so a short answer picked by touch never reaches the writer', async () => {
+    const { writer, asked } = slowWriter()
+    const { fake, open, menu, router } = await world([], { writer })
+    await open()
+    fake.tap()
+    await settle()
+    expect(router.current.id).toBe('replies:anna')
+    expect(menu()).not.toContain('Write it out')
     expect(asked).toEqual([])
   })
 

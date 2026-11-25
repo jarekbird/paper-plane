@@ -124,6 +124,9 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
   }
   return {
     top: at,
+    reset: () => {
+      top = 0
+    },
     shown: () =>
       lines()
         .slice(at(), at() + ROWS)
@@ -169,6 +172,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     const show = (text: string) => {
       words = text
       lines = wrapText(words, SCREEN_WIDTH)
+      scroll.reset()
     }
     const busy = () =>
       state === 'writing'
@@ -188,6 +192,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
+      risk: 'voice',
       blocked: () => busy() ?? unseen(),
       run: async () => {
         if (!screen) return
@@ -280,7 +285,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
 
     const self: Screen = {
       id: `draft:${id}`,
-      actions: () => [send, keep, ...(writer ? [words === asSaid ? write : revert] : []), scroll.down, scroll.up],
+      actions: () => [send, keep, ...(writer && spoken ? [words === asSaid ? write : revert] : []), scroll.down, scroll.up],
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
