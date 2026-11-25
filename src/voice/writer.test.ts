@@ -27,11 +27,17 @@ describe('what the app asks of the relay to write a message', () => {
     expect(Object.keys(calls[0].body).sort()).toEqual(['max_tokens', 'messages', 'model'])
     expect(calls[0].body.model).toBe(WRITER_MODEL)
     const messages = calls[0].body.messages as { role: string; content: string }[]
-    expect(messages.map(message => message.role)).toEqual(['system', 'user'])
-    expect(messages[1].content).toBe('tell her yes and ask where')
+    expect(messages[0].role).toBe('system')
+    expect(messages.at(-1)).toEqual({ role: 'user', content: 'Tell them: yes. Ask them: where' })
     const other = writerThrough(RELAY, ask)
     await other.write('say no', live())
-    expect((calls[1].body.messages as { content: string }[])[0].content).toBe(messages[0].content)
+    const again = calls[1].body.messages as { role: string; content: string }[]
+    expect(again.at(-1)).toEqual({ role: 'user', content: 'Tell them: no' })
+    expect(again.slice(0, -1)).toEqual(messages.slice(0, -1))
+    const examples = messages.slice(1, -1)
+    expect(examples.map(message => message.role)).toEqual(
+      Array.from({ length: examples.length }, (_, at) => (at % 2 ? 'assistant' : 'user')),
+    )
   })
 
   it('S3: carries no key', async () => {

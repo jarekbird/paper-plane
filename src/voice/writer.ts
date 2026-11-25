@@ -1,10 +1,22 @@
-import { oneMessage } from '../instruction.ts'
+import { noteOf, oneMessage } from '../instruction.ts'
 import type { Writer } from '../messenger.ts'
 
 export const WRITER_MODEL = 'mistralai/mistral-nemo'
 const MAX_TOKENS = 200
+// With the examples below this wording gave a faithful message 69 times of 72 with mistralai/mistral-nemo on 2026-11-25 (docs/proof/say-it-short/live.md).
 const SYSTEM =
-  'The user is wearing smart glasses and says, in a few words, what to answer someone in a chat. Write the text message they want to send, in the first person, the way they would type it: short, natural, plain text, one paragraph. Use only what they said: add no fact, name, time or place, and no greeting or sign-off they did not ask for. Answer with the message only.'
+  'You turn a spoken note into the text message to send. The note says what to tell or ask "them": "them" is the person who will read the message, so write to them as "you" and never mention "them" or the telling. Write as the sender, in the first person, the way people type on a phone: one or two short, natural sentences with normal capital letters and punctuation. Keep every point of the note and add nothing: no fact, name, time or place that is not in it, no greeting, no sign-off, no emoji. A thing to ask becomes a question. Answer with the message only, without quotes.'
+const EXAMPLES = [
+  ['Tell them: sure. Ask them: when', 'Sure. When?'],
+  ['Tell them: the meeting is cancelled', 'The meeting is cancelled.'],
+  ['Ask them: if they can pick me up', 'Can you pick me up?'],
+  ['Ask them: if Friday is still fine', 'Is Friday still fine?'],
+  ['Tell them: the door is open. Tell them: to come in', 'The door is open. Come in.'],
+  ['Tell them: thanks, I owe you one', 'Thanks, I owe you one.'],
+].flatMap(([note, message]) => [
+  { role: 'user', content: note },
+  { role: 'assistant', content: message },
+])
 
 export function writerThrough(relay: string, ask: typeof fetch = fetch): Writer {
   const base = new URL(relay)
@@ -17,10 +29,7 @@ export function writerThrough(relay: string, ask: typeof fetch = fetch): Writer 
       body: JSON.stringify({
         model: WRITER_MODEL,
         max_tokens: MAX_TOKENS,
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: words },
-        ],
+        messages: [{ role: 'system', content: SYSTEM }, ...EXAMPLES, { role: 'user', content: noteOf(words) }],
       }),
       signal,
     })
