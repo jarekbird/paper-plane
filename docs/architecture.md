@@ -84,6 +84,7 @@ flowchart LR
   src_replies_ts["src/replies.ts"]
   src_store_ts["src/store.ts"]
   src_telegram["src/telegram"]
+  src_voice["src/voice"]
   src_account_contract_ts --> src_messenger_ts
   src_app_ts --> earshot
   src_app_ts --> src_glasses
@@ -109,6 +110,7 @@ flowchart LR
   src_main_ts --> src_phone
   src_main_ts --> src_store_ts
   src_main_ts --> src_telegram
+  src_main_ts --> src_voice
   src_messenger_contract_ts --> src_messenger_ts
   src_phone --> earshot
   src_phone --> src_inbox_ts
@@ -119,6 +121,7 @@ flowchart LR
   src_telegram --> _mtcute
   src_telegram --> earshot
   src_telegram --> src_messenger_ts
+  src_voice --> earshot
 ```
 
 Enforced by `eslint.config.js`:
