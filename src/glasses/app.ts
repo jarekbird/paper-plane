@@ -365,7 +365,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         '',
         ...wrapText(cleanText(`${WORDS.sponsored}: ${ad.title}`), SCREEN_WIDTH),
         ...wrapText(cleanText(ad.text), SCREEN_WIDTH),
-        fitText(oneLine(ad.link.replace(/^https?:\/\//, '')), SCREEN_WIDTH),
+        ...wrapText(oneLine(ad.link.replace(/^https?:\/\//, '')), SCREEN_WIDTH),
       )
       return { lines, blocks, ad: { from, to: lines.length } }
     }
@@ -582,6 +582,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         entered.own(messenger.onChange(() => void load(entered)))
         entered.own(
           shown.onClear(() => {
+            if (router.current !== self) return
             const message = inSight()
             seenClear = message ? keyOf(message) : null
             sawAd(entered)

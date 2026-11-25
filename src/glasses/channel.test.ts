@@ -133,6 +133,41 @@ describe('a channel', () => {
     expect(messenger.seenSponsored()).toEqual([DEMO_SPONSORED.id])
   })
 
+  it('G6, A5: is not called seen while another screen covers the channel, only once the channel is back on show', async () => {
+    let release = () => {}
+    const { fake, messenger, router, openChannel } = await world({
+      change: sample => {
+        const sponsored = sample.sponsored
+        sample.sponsored = async chat => {
+          await new Promise<void>(resolve => (release = resolve))
+          return sponsored(chat)
+        }
+      },
+    })
+    await openChannel()
+    fake.pick('Message someone')
+    await settle()
+    expect(router.current.id).toBe('pick-chat')
+    release()
+    await settle(3_000)
+    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(messenger.seenSponsored()).toEqual([])
+    fake.double()
+    await settle(3_000)
+    expect(router.current.id).toBe('chat:news')
+    expect(fake.lines().join(' ')).toContain('Sponsored: Sample sponsor')
+    expect(messenger.seenSponsored()).toEqual([DEMO_SPONSORED.id])
+  })
+
+  it('shows a long link in full, over as many lines as it takes, so scrolling reaches its end', async () => {
+    const link = 'https://example.org/events/heads-up-build-week/registration/session-thursday-confirmation'
+    const { fake, openChannel } = await world({ change: sample => void (sample.sponsored = async () => ({ ...DEMO_SPONSORED, link })) })
+    await openChannel()
+    const shown = fake.lines().slice(1, -1).join('')
+    expect(shown).toContain('example.org/events/heads-up-build-week/registration/session-thursday-confirmation')
+    expect(shown).not.toContain('…')
+  })
+
   it('shows the posts alone when Telegram gives no sponsored message or cannot be asked', async () => {
     for (const answer of [async () => null, async () => Promise.reject(new Error('no'))]) {
       const { fake, messenger, openChannel } = await world({ change: sample => void (sample.sponsored = answer) })
