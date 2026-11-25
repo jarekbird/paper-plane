@@ -1,4 +1,4 @@
-import { SAMPLE_RATE, type Question } from 'earshot'
+import { Lifetime, LifetimeEnded, SAMPLE_RATE, SayError, type Question } from 'earshot'
 import { describe, expect, it } from 'vitest'
 import { hearingThrough } from './hearing.ts'
 
@@ -57,6 +57,52 @@ describe('what the app asks of the voice relay', () => {
     await hearing.transcribe(audio)
     await hearing.model.choose(question)
     expect(calls.map(call => new URL(call.url).origin)).toEqual([RELAY, RELAY])
+  })
+
+  it('S4: an answer that cannot be read fails without a word of it: what was heard is in no error the shell would log', async () => {
+    const unreadable: typeof fetch = async () => new Response('Meet Anna at the usual place at 12:30 {', { status: 200 })
+    const hearing = hearingThrough(RELAY, unreadable)
+    for (const work of [() => hearing.transcribe(audio), () => hearing.model.choose(question)]) {
+      const error: unknown = await work().then(
+        () => null,
+        (thrown: unknown) => thrown,
+      )
+      expect(error).toBeInstanceOf(Error)
+      const failed = error as Error
+      expect(failed.cause).toBeUndefined()
+      expect(`${failed.name} ${failed.message} ${failed.stack}`).not.toMatch(/Meet|Anna|usual|12:30/)
+      expect(failed.message).toBe('The voice relay answered 200')
+    }
+  })
+
+  it('S4: keeps the few words Earshot says for a refusal or a lost connection, and drops what caused them', async () => {
+    const refused: typeof fetch = async () => new Response('{"error":"Meet Anna"}', { status: 429 })
+    const lost: typeof fetch = async () => {
+      throw new TypeError('Failed to fetch https://relay.example/?heard=Meet+Anna')
+    }
+    const errors = await Promise.all(
+      [refused, lost].map(ask =>
+        hearingThrough(RELAY, ask)
+          .transcribe(audio)
+          .then(
+            () => null,
+            (thrown: unknown) => thrown,
+          ),
+      ),
+    )
+    expect(errors.map(error => (error instanceof SayError ? [error.say, error.status, error.cause] : null))).toEqual([
+      ['Too many requests', 429, undefined],
+      ['No connection', undefined, undefined],
+    ])
+  })
+
+  it('still ends quietly when the hold is called off', async () => {
+    const life = new Lifetime()
+    const never: typeof fetch = (_, init) =>
+      new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('gone', 'AbortError'))))
+    const waiting = hearingThrough(RELAY, never).transcribe(audio, life)
+    life.end()
+    await expect(waiting).rejects.toBeInstanceOf(LifetimeEnded)
   })
 
   it('refuses a relay that is not reached over https, so the sound is never sent in the clear', () => {
