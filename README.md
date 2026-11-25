@@ -19,6 +19,7 @@ you say into a message), in one flow.
 | A message taken back                 | "Sent. Tap to undo" for five seconds                               |
 | A reply kept for later               | Menu > Keep for later: it becomes the chat's draft in Telegram     |
 | A thumbs-up, or a message saved      | Menu > Like, or Save (to Saved Messages); or say "like that"       |
+| A channel's posts                    | Tap the channel: its posts, then Telegram's sponsored message, as Telegram's terms ask |
 | Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap

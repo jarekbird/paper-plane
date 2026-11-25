@@ -26,7 +26,7 @@ import {
 import type { Inbox } from '../inbox.ts'
 import type { Display } from './display.ts'
 import { instructed } from '../instruction.ts'
-import type { Chat, Message, Messenger, Writer } from '../messenger.ts'
+import type { Chat, Message, Messenger, Sponsored, Writer } from '../messenger.ts'
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
@@ -78,6 +78,8 @@ const WORDS = {
   noLoad: 'Could not load this chat',
   noMessages: 'No messages yet',
   tapToReply: 'Tap to reply',
+  readOnly: 'Read only',
+  sponsored: 'Sponsored',
   tapToSend: 'Tap to send',
   sending: 'Sending…',
   writing: 'Writing it out…',
@@ -111,7 +113,7 @@ const showable = (words: string) => {
 const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
 
 const line = (chat: Chat | undefined, message: Message) => {
-  const text = message.mine ? `You: ${message.text}` : chat?.kind === 'person' ? message.text : `${message.from}: ${message.text}`
+  const text = message.mine ? `You: ${message.text}` : chat?.kind === 'group' ? `${message.from}: ${message.text}` : message.text
   return message.liked ? `${text} ${LIKED}` : text
 }
 
@@ -334,11 +336,20 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
+    const channel = inbox.chat(id)?.kind === 'channel'
+    let ad: Sponsored | null = null
+    let adAsked = false
+    let adSeen = false
+    let adStartSeen = false
 
-    const layout = (): { lines: string[]; blocks: { message: Message; from: number; to: number }[] } => {
-      if (failed) return { lines: [WORDS.noLoad], blocks: [] }
-      if (messages === null) return { lines: [WORDS.loading], blocks: [] }
-      if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [] }
+    const layout = (): {
+      lines: string[]
+      blocks: { message: Message; from: number; to: number }[]
+      ad: { from: number; to: number } | null
+    } => {
+      if (failed) return { lines: [WORDS.noLoad], blocks: [], ad: null }
+      if (messages === null) return { lines: [WORDS.loading], blocks: [], ad: null }
+      if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [], ad: null }
       const chat = inbox.chat(id)
       const lines: string[] = []
       const blocks: { message: Message; from: number; to: number }[] = []
@@ -348,7 +359,15 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         blocks.push({ message, from: lines.length, to: lines.length + wrapped.length })
         lines.push(...wrapped)
       }
-      return { lines, blocks }
+      if (!ad) return { lines, blocks, ad: null }
+      const from = lines.length + 1
+      lines.push(
+        '',
+        ...wrapText(cleanText(`${WORDS.sponsored}: ${ad.title}`), SCREEN_WIDTH),
+        ...wrapText(cleanText(ad.text), SCREEN_WIDTH),
+        ...wrapText(oneLine(ad.link.replace(/^https?:\/\//, '')), SCREEN_WIDTH),
+      )
+      return { lines, blocks, ad: { from, to: lines.length } }
     }
     const scroll = scroller(() => layout().lines, redraw)
     const inView = (): Message[] => {
@@ -377,6 +396,27 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       failed = false
       redraw()
       markRead(entered)
+      if (channel && !adAsked) void sponsor(entered)
+    }
+    const sponsor = async (entered: Lifetime) => {
+      adAsked = true
+      try {
+        ad = await entered.guard(messenger.sponsored(id))
+      } catch {
+        return
+      }
+      redraw()
+    }
+    const sawAd = (entered: Lifetime) => {
+      const at = layout().ad
+      const top = scroll.top()
+      if (!ad || adSeen || !at || !upToDate()) return
+      adStartSeen ||= at.from >= top && at.from < top + ROWS
+      if (!adStartSeen || at.to > top + ROWS || at.to <= top) return
+      adSeen = true
+      void entered.guard(messenger.sawSponsored(ad)).catch(() => {
+        adSeen = false
+      })
     }
     const markRead = (entered: Lifetime) => {
       const newestId = messages?.at(-1)?.id ?? null
@@ -531,7 +571,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
 
     const self: Screen = {
       id: `chat:${id}`,
-      actions: () => [reply, like, save, takeBack, scroll.down, scroll.up],
+      actions: () => (channel ? [like, save, scroll.down, scroll.up] : [reply, like, save, takeBack, scroll.down, scroll.up]),
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
@@ -542,19 +582,23 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         entered.own(messenger.onChange(() => void load(entered)))
         entered.own(
           shown.onClear(() => {
+            if (router.current !== self) return
             const message = inSight()
             seenClear = message ? keyOf(message) : null
+            sawAd(entered)
           }),
         )
         entered.own(inbox.onChange(() => markRead(entered)))
         void load(entered)
       },
       view: () =>
-        boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
-          on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
-        }),
+        channel
+          ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
+          : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
+              on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
+            }),
     }
-    chatOn.set(self, { chat: id, covers: false })
+    if (!channel) chatOn.set(self, { chat: id, covers: false })
     return self
   }
 
@@ -605,7 +649,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     choose: () => {
       const { matches, rest } = named()
       if (matches.length !== 1) pick(matches)
-      else if (showable(rest)) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest, true))
+      else if (showable(rest) && matches[0].kind !== 'channel')
+        router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest, true))
       else router.jump(chatScreen(matches[0].id))
     },
     run: chat => router.open(chatScreen(chat.id)),

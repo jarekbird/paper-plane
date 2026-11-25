@@ -1,5 +1,5 @@
 import type { Chat, Messenger } from '../messenger.ts'
-import { LIKE, toChat, toMessage, type DialogLike, type MessageLike } from './map.ts'
+import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type MessageLike, type SponsoredLike } from './map.ts'
 
 export interface ClientLike {
   iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<DialogLike>
@@ -11,6 +11,8 @@ export interface ClientLike {
   saveDraft(chat: number, draft: { message: string }): Promise<void>
   forwardMessagesById(params: { toChatId: 'me'; fromChatId: number; messages: number[] }): Promise<unknown>
   sendReaction(params: { chatId: number; message: number; emoji: string }): Promise<unknown>
+  sponsoredMessages(chat: number): Promise<SponsoredLike[]>
+  viewSponsored(randomId: Uint8Array): Promise<unknown>
   onUpdate: {
     add(listener: (update: { name: string }) => void): void
     remove(listener: (update: { name: string }) => void): void
@@ -23,6 +25,7 @@ const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'histo
 export function messengerOver(client: ClientLike): Messenger & { close(): void } {
   const listeners = new Set<() => void>()
   const keeping = new Map<string, Promise<boolean>>()
+  const ads = new Map<string, Uint8Array>()
   const changed = () => {
     for (const listener of [...listeners]) listener()
   }
@@ -82,6 +85,18 @@ export function messengerOver(client: ClientLike): Messenger & { close(): void }
     like: async message => {
       await client.sendReaction({ chatId: Number(message.chat), message: Number(message.id), emoji: LIKE })
       changed()
+    },
+    sponsored: async chat => {
+      const [first] = await client.sponsoredMessages(Number(chat))
+      if (!first) return null
+      const id = sponsoredId(first)
+      ads.set(id, first.randomId)
+      return { id, title: first.title, text: first.message, link: first.url }
+    },
+    sawSponsored: async sponsored => {
+      const randomId = ads.get(sponsored.id)
+      if (!randomId) throw new Error('No such sponsored message')
+      await client.viewSponsored(randomId)
     },
     onChange: told => {
       listeners.add(told)

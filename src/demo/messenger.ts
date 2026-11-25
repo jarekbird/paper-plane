@@ -1,4 +1,4 @@
-import type { Chat, ChatKind, Message, Messenger } from '../messenger.ts'
+import type { Chat, ChatKind, Message, Messenger, Sponsored } from '../messenger.ts'
 
 interface DemoChat {
   id: string
@@ -50,12 +50,19 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines
 ]
 
 export const DEMO_PICKS: readonly string[] = ['anna', 'launch', 'news']
+export const DEMO_SPONSORED: Sponsored = {
+  id: 'sample-ad',
+  title: 'Sample sponsor',
+  text: 'This is where Telegram shows a sponsored message in a channel.',
+  link: 'example.org/sample',
+}
 
 export interface DemoMessenger extends Messenger {
   arrive(chat: string, from: string, text: string): Message
   edit(message: Message, text: string): void
   sent(): readonly Message[]
   saved(): readonly Message[]
+  seenSponsored(): readonly string[]
   drafts(): ReadonlyMap<string, string>
 }
 
@@ -64,6 +71,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const listeners = new Set<() => void>()
   const outbox: Message[] = []
   const kept: Message[] = []
+  const seenAds: string[] = []
   const drafts = new Map<string, string>()
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
@@ -142,6 +150,12 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       chat.messages[at] = { ...chat.messages[at], liked: true }
       tell()
     },
+    sponsored: async id => (find(id).kind === 'channel' ? DEMO_SPONSORED : null),
+    sawSponsored: async sponsored => {
+      if (sponsored.id !== DEMO_SPONSORED.id) throw new Error('No such sponsored message')
+      seenAds.push(sponsored.id)
+    },
+    seenSponsored: () => seenAds,
     onChange: told => {
       listeners.add(told)
       return () => void listeners.delete(told)

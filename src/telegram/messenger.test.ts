@@ -10,11 +10,20 @@ function fakeClient() {
   const peers: PeerLike[] = [
     { type: 'user', id: 42, displayName: 'Anna Lee' },
     { type: 'chat', id: -1001234, displayName: 'Launch crew', chatType: 'supergroup' },
+    { type: 'chat', id: -1005678, displayName: 'Glasses news', chatType: 'channel' },
   ]
   const unread = new Map<number, number>([[-1001234, 2]])
   const messages: MessageLike[] = []
   const drafts = new Map<number, string>()
   const forwarded: string[] = []
+  const viewed: string[] = []
+  const ad = {
+    randomId: new Uint8Array([0, 171, 16, 255]),
+    title: 'A sponsor',
+    message: 'Sponsored words.',
+    url: 'https://t.me/sponsor',
+    extra: 'not kept',
+  }
   const listeners = new Set<(update: { name: string }) => void>()
   const add = (chat: PeerLike, sender: PeerLike, text: string, isService = false): MessageLike => {
     const message: MessageLike = {
@@ -67,6 +76,9 @@ function fakeClient() {
       const at = messages.findIndex(message => message.chat.id === chatId && message.id === id)
       messages[at] = { ...messages[at], reactions: { reactions: [{ emoji, order: 0 }] } }
     },
+    sponsoredMessages: async chat =>
+      peer(chat).chatType === 'channel' ? [ad, { ...ad, randomId: new Uint8Array([9]), title: 'A second one' }] : [],
+    viewSponsored: async randomId => void viewed.push(Array.from(randomId).join(',')),
     onUpdate: { add: listener => void listeners.add(listener), remove: listener => void listeners.delete(listener) },
   }
   return {
@@ -74,6 +86,7 @@ function fakeClient() {
     peers,
     add,
     forwarded,
+    viewed,
     listening: () => listeners.size,
     emit: (name: string) => listeners.forEach(listener => listener({ name })),
   }
@@ -81,10 +94,27 @@ function fakeClient() {
 
 messengerContract('the Telegram adapter, over a client that tells nothing about the user’s own writes', async () => {
   const fake = fakeClient()
-  return { messenger: messengerOver(fake.client), chat: '42', unreadChat: '-1001234', saved: async () => fake.forwarded }
+  fake.add(fake.peers[2], fake.peers[2], 'Heads Up build week has started.')
+  return {
+    messenger: messengerOver(fake.client),
+    chat: '42',
+    unreadChat: '-1001234',
+    channel: '-1005678',
+    saved: async () => fake.forwarded,
+    sponsoredSeen: async () => fake.viewed.length,
+  }
 })
 
 describe('the Telegram adapter', () => {
+  it('G6: gives the first sponsored message Telegram has for a channel, and tells Telegram it was seen by the id Telegram gave', async () => {
+    const fake = fakeClient()
+    const messenger = messengerOver(fake.client)
+    const sponsored = await messenger.sponsored('-1005678')
+    expect(sponsored).toEqual({ id: '00ab10ff', title: 'A sponsor', text: 'Sponsored words.', link: 'https://t.me/sponsor' })
+    await messenger.sawSponsored(sponsored!)
+    expect(fake.viewed).toEqual(['0,171,16,255'])
+  })
+
   it('tells listeners when Telegram reports a message, an edit, a deletion or a read, and nothing else', () => {
     const fake = fakeClient()
     let told = 0

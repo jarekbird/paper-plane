@@ -43,6 +43,15 @@ const MEDIA: Record<string, string> = {
 
 export const chatId = (peer: PeerLike): string => String(peer.id)
 
+export interface SponsoredLike {
+  randomId: Uint8Array
+  title: string
+  message: string
+  url: string
+}
+
+export const sponsoredId = (ad: SponsoredLike): string => Array.from(ad.randomId, byte => byte.toString(16).padStart(2, '0')).join('')
+
 export const kindOf = (peer: PeerLike): ChatKind => (peer.type === 'user' ? 'person' : peer.chatType === 'channel' ? 'channel' : 'group')
 
 export function toMessage(message: MessageLike): Message {

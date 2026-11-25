@@ -5,7 +5,9 @@ export interface ContractWorld {
   messenger: Messenger
   chat: string
   unreadChat: string
+  channel: string
   saved(): Promise<string[]>
+  sponsoredSeen(): Promise<number>
 }
 
 export function messengerContract(name: string, make: () => Promise<ContractWorld>): void {
@@ -97,6 +99,24 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       expect((await messenger.history(unreadChat, 3)).at(-1)).toMatchObject({ id: newest.id, liked: true })
       expect(told).toBeGreaterThan(0)
       stop()
+    })
+
+    it('G6: has a sponsored message for a channel, and none for a chat with a person', async () => {
+      const { messenger, chat, channel } = await make()
+      const sponsored = await messenger.sponsored(channel)
+      expect(sponsored?.title).toBeTruthy()
+      expect(sponsored?.text).toBeTruthy()
+      expect(sponsored?.link).toBeTruthy()
+      expect(await messenger.sponsored(chat)).toBeNull()
+    })
+
+    it('G6: is told once when a sponsored message was seen, and refuses one it never gave', async () => {
+      const { messenger, channel, sponsoredSeen } = await make()
+      const sponsored = await messenger.sponsored(channel)
+      await messenger.sawSponsored(sponsored!)
+      expect(await sponsoredSeen()).toBe(1)
+      await expect(messenger.sawSponsored({ id: 'made-up', title: 'x', text: 'x', link: 'x.example' })).rejects.toThrow()
+      expect(await sponsoredSeen()).toBe(1)
     })
 
     it('stops telling a listener that left', async () => {

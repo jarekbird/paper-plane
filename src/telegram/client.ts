@@ -37,6 +37,11 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     saveDraft: (chat, draft) => current.saveDraft(chat, draft),
     forwardMessagesById: params => current.forwardMessagesById(params),
     sendReaction: params => current.sendReaction(params),
+    sponsoredMessages: async chat => {
+      const answer = await current.call({ _: 'messages.getSponsoredMessages', peer: await current.resolvePeer(chat) })
+      return answer._ === 'messages.sponsoredMessages' ? answer.messages : []
+    },
+    viewSponsored: randomId => current.call({ _: 'messages.viewSponsoredMessage', randomId }),
     onUpdate: {
       add: listener => {
         heard.add(listener)
