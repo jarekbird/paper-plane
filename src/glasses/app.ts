@@ -284,7 +284,10 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       messages = loaded
       failed = false
       redraw()
-      if ((inbox.chat(id)?.unread ?? 0) > 0) void entered.guard(messenger.read(id)).catch(() => {})
+      markRead(entered)
+    }
+    const markRead = (entered: Lifetime) => {
+      if (!pending && !failed && (inbox.chat(id)?.unread ?? 0) > 0) void entered.guard(messenger.read(id)).catch(() => {})
     }
 
     const sent = (message: Message) => {
@@ -432,11 +435,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
         entered.own(() => {
           if (sentIn.get(id) === sent) sentIn.delete(id)
         })
-        entered.own(
-          inbox.onChange(() => {
-            void load(entered)
-          }),
-        )
+        entered.own(messenger.onChange(() => void load(entered)))
+        entered.own(inbox.onChange(() => markRead(entered)))
         void load(entered)
       },
       view: () =>

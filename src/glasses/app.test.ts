@@ -107,6 +107,14 @@ describe('a chat', () => {
     expect(fake.lines()[1]).toBe('Cy: Can someone confirm the demo time for Thursday?')
   })
 
+  it('marks a message read that arrives while the chat is open', async () => {
+    const { messenger, unread, openFirst } = await world(['anna'])
+    await openFirst()
+    messenger.arrive('anna', 'Anna', 'Or one, if that is easier.')
+    await settle()
+    expect(await unread('anna')).toBe(0)
+  })
+
   it('shows a message that arrives while the chat is open', async () => {
     const { fake, messenger, openFirst } = await world(['anna'])
     await openFirst()
@@ -905,6 +913,24 @@ describe('the newest message from someone else', () => {
     await settle()
     expect(messenger.saved()).toEqual([])
     messenger.history = history
+    release()
+    await settle()
+  })
+
+  it('S5: is not saved from the old text when it is edited and the list of chats is still refreshing', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const chats = messenger.chats
+    let release = () => {}
+    messenger.chats = async () => {
+      await new Promise<void>(resolve => (release = resolve))
+      return chats()
+    }
+    messenger.edit((await messenger.history('anna', 1))[0], 'Send 500 to this account.')
+    fake.pick('Save')
+    await settle()
+    expect(messenger.saved()).toEqual([])
+    messenger.chats = chats
     release()
     await settle()
   })
