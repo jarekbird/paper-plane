@@ -18,6 +18,13 @@ export interface Chat {
   last: Message | null
 }
 
+export interface Sponsored {
+  id: string
+  title: string
+  text: string
+  link: string
+}
+
 export interface Messenger {
   chats(): Promise<Chat[]>
   history(chat: string, limit: number): Promise<Message[]>
@@ -27,6 +34,8 @@ export interface Messenger {
   keep(chat: string, text: string, signal: AbortSignal): Promise<boolean>
   save(message: Message): Promise<void>
   like(message: Message): Promise<void>
+  sponsored(chat: string): Promise<Sponsored | null>
+  sawSponsored(sponsored: Sponsored): Promise<void>
   onChange(told: () => void): () => void
 }
 

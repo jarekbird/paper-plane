@@ -31,7 +31,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         |                          |
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
-| 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    |                          |
+| 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    | built, on samples        |
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
 | 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              |                          |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
