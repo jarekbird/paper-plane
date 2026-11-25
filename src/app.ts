@@ -7,7 +7,7 @@ import type { PhoneParts } from './phone/page.ts'
 import { SignIn } from './phone/signin.ts'
 import { Phrases } from './phrases.ts'
 
-export type Scope = 'sample' | 'telegram' | 'connecting'
+export type Scope = 'sample' | 'telegram' | 'connecting' | 'offline'
 
 export interface AppParts {
   life: Lifetime
@@ -29,7 +29,9 @@ const NOTES = {
   sample: 'These are sample chats. Pick the ones you want on your glasses.',
   telegram: 'Pick the chats you want on your glasses.',
   connecting: 'Connecting to Telegram…',
+  offline: 'Cannot reach Telegram',
 }
+const SAMPLE_TITLE = 'Sample chats'
 
 export async function startApp(parts: AppParts): Promise<App> {
   const { life, display, store, sample, telegram, hearing, phone } = parts
@@ -56,7 +58,13 @@ export async function startApp(parts: AppParts): Promise<App> {
     const opened = new Inbox(current, messenger, store, who ? `telegram:${who.id}` : 'sample')
     scope = who ? 'telegram' : 'sample'
     inbox = opened
-    startGlasses(current, display, { inbox: opened, messenger, phrases, ...(hearing ? { hearing } : {}) })
+    startGlasses(current, display, {
+      ...(who ? {} : { title: SAMPLE_TITLE }),
+      inbox: opened,
+      messenger,
+      phrases,
+      ...(hearing ? { hearing } : {}),
+    })
     phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope] })
     const fill = async () => {
       await current.guard(opened.start())
@@ -69,6 +77,25 @@ export async function startApp(parts: AppParts): Promise<App> {
   const known = telegram ? await life.guard(telegram.account.known()) : false
   if (known) wait()
   else show(null)
+  const offline = (model: SignIn) => {
+    session.end()
+    session = life.child()
+    scope = 'offline'
+    inbox = null
+    startWaiting(session, display, NOTES.offline, () => void retry(model))
+    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.offline })
+  }
+
+  const retry = async (model: SignIn) => {
+    wait()
+    try {
+      await life.guard(model.retry())
+    } catch {
+      return
+    }
+    if (scope === 'connecting') offline(model)
+  }
+
   const restore = async (model: SignIn) => {
     let who: Who | null
     try {
@@ -77,6 +104,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       return
     }
     if (who) show(who)
+    else if (known && model.view().step === 'offline') offline(model)
     else if (known) show(null)
   }
   if (signIn) void restore(signIn)

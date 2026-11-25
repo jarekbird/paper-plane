@@ -44,15 +44,24 @@ function problemOf(error: unknown): SignInError {
 export function accountOver(life: Lifetime, client: AuthClientLike, place: SessionPlace): Account {
   let pending: { phone: string; hash: string } | null = null
 
+  const forget = async () => {
+    await life.guard(place.save(null).catch(() => {}))
+    await life.guard(Promise.resolve(client.logOut()).catch(() => {}))
+  }
+
   const entered = async (user: UserLike, signal: AbortSignal): Promise<Who> => {
-    if (signal.aborted) {
-      await life.guard(Promise.resolve(client.logOut()).catch(() => {}))
-      signal.throwIfAborted()
+    const left = async (): Promise<never> => {
+      await life.guard(forget())
+      return signal.throwIfAborted() as never
     }
-    pending = null
+    if (signal.aborted) return left()
     const session = await life.guard(client.exportSession())
+    if (signal.aborted) return left()
     await life.guard(place.save(session))
+    if (signal.aborted) return left()
     await life.guard(client.startUpdatesLoop())
+    if (signal.aborted) return left()
+    pending = null
     return { id: String(user.id), name: user.displayName }
   }
 
@@ -103,12 +112,18 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     },
     signOut: async () => {
       pending = null
-      await life.guard(place.save(null))
+      let removed = true
+      try {
+        await life.guard(place.save(null))
+      } catch (error) {
+        if (error instanceof LifetimeEnded) throw error
+        removed = false
+      }
       try {
         await life.guard(client.logOut())
         return 'told'
       } catch (error) {
-        if (error instanceof LifetimeEnded) throw error
+        if (error instanceof LifetimeEnded || !removed) throw error
         return 'untold'
       }
     },

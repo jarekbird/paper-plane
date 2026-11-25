@@ -8,7 +8,8 @@ import { display } from './glasses/display.ts'
 import type { Account, Who } from './messenger.ts'
 
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
-const SAMPLE_HOME = ['Paper Plane', '> Anna (2)', 'Launch crew (1)', 'Glasses news']
+const SAMPLE_HOME = ['Sample chats', '> Anna (2)', 'Launch crew (1)', 'Glasses news']
+const OFFLINE = ['Paper Plane', 'Cannot reach Telegram', 'Tap to try again']
 const NO_PICKS = ['Paper Plane', 'Pick your chats on the phone']
 const CONNECTING = ['Paper Plane', 'Connecting to Telegram…']
 
@@ -154,5 +155,47 @@ describe('at launch, while Telegram has not answered yet', () => {
     await settle()
     expect(made.app.scope()).toBe('sample')
     expect(made.fake.lines()).toEqual(SAMPLE_HOME)
+  })
+
+  it('says on the glasses that Telegram cannot be reached, and never shows sample chats in the user’s place', async () => {
+    let online = false
+    const made = await world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        restore: async () => {
+          if (!online) throw new Error('offline')
+          return account.restore()
+        },
+      }),
+    })
+    expect(made.app.scope()).toBe('offline')
+    expect(made.fake.lines()).toEqual(OFFLINE)
+    made.fake.tap()
+    await settle()
+    expect(made.fake.lines()).toEqual(OFFLINE)
+    online = true
+    made.fake.tap()
+    await settle()
+    expect(made.app.scope()).toBe('telegram')
+    expect(made.fake.lines()).toEqual(NO_PICKS)
+  })
+
+  it('shows the user’s chats when the phone page’s "Try again" gets through', async () => {
+    let online = false
+    const made = await world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        restore: async () => {
+          if (!online) throw new Error('offline')
+          return account.restore()
+        },
+      }),
+    })
+    online = true
+    await made.app.signIn!.retry()
+    await settle()
+    expect(made.fake.lines()).toEqual(NO_PICKS)
   })
 })

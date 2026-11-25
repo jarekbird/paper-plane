@@ -6,7 +6,7 @@ import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
 import { display } from './glasses/display.ts'
 import { launch } from './launch.ts'
 import { startPhone } from './phone/page.ts'
-import { appStore, sessionPlace } from './store.ts'
+import { appStore } from './store.ts'
 
 const id = import.meta.env.VITE_TELEGRAM_API_ID
 const hash = import.meta.env.VITE_TELEGRAM_API_HASH
@@ -14,13 +14,13 @@ const how = launch(location.hash, { id, hash })
 
 const life = new Lifetime()
 const bridge = await waitForEvenAppBridge()
-const store = appStore(bridge)
+const { store, sessions } = appStore(bridge)
 
 async function ownAccount() {
   if (how.own === 'sample') return { account: demoAccount({ signedIn: false }), messenger: demoMessenger() }
   if (!id || !hash) return undefined
   const { telegram } = await life.guard(import('./telegram/client.ts'))
-  return telegram(life, { apiId: Number(id), apiHash: hash }, sessionPlace(store))
+  return telegram(life, { apiId: Number(id), apiHash: hash }, sessions)
 }
 
 const own = await ownAccount()

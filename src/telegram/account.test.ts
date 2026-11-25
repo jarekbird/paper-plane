@@ -120,16 +120,53 @@ describe('the Telegram account', () => {
     expect(made.first.loops).toBe(0)
   })
 
-  it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
-    const made = world(false)
-    await made.account.askCode(PHONE, live())
-    await made.account.giveCode(CODE, live())
-    made.first.logOut = async () => refuse('NETWORK_DOWN')
-    expect(await made.account.signOut()).toBe('untold')
-    expect(made.saved()).toBeNull()
+  it.each(['exportSession', 'startUpdatesLoop'] as const)(
+    'A5: keeps nothing when the user leaves while %s is still running',
+    async step => {
+      const made = world(false)
+      const real = made.first[step].bind(made.first)
+      let answer = () => {}
+      made.first[step] = (async () => {
+        await new Promise<void>(resolve => (answer = resolve))
+        return real()
+      }) as never
+      await made.account.askCode(PHONE, live())
+      const left = new AbortController()
+      const attempt = made.account.giveCode(CODE, left.signal).catch(() => 'left')
+      await Promise.resolve()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      left.abort()
+      answer()
+      expect(await attempt).toBe('left')
+      expect(made.saved()).toBeNull()
+      expect(made.side.open()).toBe(0)
+    },
+  )
+
+  it('A5: keeps nothing when the user leaves while the sign-in is being stored', async () => {
+    const side = telegramSide(false)
+    let saved: string | null = null
+    let stored = () => {}
+    const place: SessionPlace = {
+      load: async () => saved,
+      save: async session => {
+        if (session !== null) await new Promise<void>(resolve => (stored = resolve))
+        saved = session
+      },
+    }
+    const account = accountOver(new Lifetime(), side.client(), place)
+    await account.askCode(PHONE, live())
+    const left = new AbortController()
+    const attempt = account.giveCode(CODE, left.signal).catch(() => 'left')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    left.abort()
+    stored()
+    expect(await attempt).toBe('left')
+    expect(saved).toBeNull()
+    expect(side.open()).toBe(0)
   })
 
-  it('does not claim a sign-out when the sign-in could not be removed from the phone', async () => {
+  it('counts as signed out when Telegram ended the session, even if the phone could not forget it', async () => {
     const side = telegramSide(false)
     let saved: string | null = null
     let broken = false
@@ -144,6 +181,37 @@ describe('the Telegram account', () => {
     await account.askCode(PHONE, live())
     await account.giveCode(CODE, live())
     broken = true
+    expect(await account.signOut()).toBe('told')
+    broken = false
+    expect(await accountOver(new Lifetime(), side.client(), place).restore()).toBeNull()
+  })
+
+  it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    made.first.logOut = async () => refuse('NETWORK_DOWN')
+    expect(await made.account.signOut()).toBe('untold')
+    expect(made.saved()).toBeNull()
+  })
+
+  it('does not claim a sign-out when the sign-in could not be removed from the phone and Telegram could not be told', async () => {
+    const side = telegramSide(false)
+    let saved: string | null = null
+    let broken = false
+    const place: SessionPlace = {
+      load: async () => saved,
+      save: async session => {
+        if (broken) throw new Error('storage is full')
+        saved = session
+      },
+    }
+    const first = side.client()
+    const account = accountOver(new Lifetime(), first, place)
+    await account.askCode(PHONE, live())
+    await account.giveCode(CODE, live())
+    broken = true
+    first.logOut = async () => refuse('NETWORK_DOWN')
     await expect(account.signOut()).rejects.toThrow()
     expect(await accountOver(new Lifetime(), side.client(), place).restore()).toEqual({ id: '4242', name: NAME })
   })

@@ -36,6 +36,7 @@ export interface Hearing {
 }
 
 export interface GlassesParts {
+  title?: string
   inbox: Inbox
   messenger: Messenger
   phrases: Phrases
@@ -56,6 +57,7 @@ const LIKED = '👍'
 const ROW_WIDTH = SCREEN_WIDTH - 20
 const WORDS = {
   title: 'Paper Plane',
+  tapToRetry: 'Tap to try again',
   whichChat: 'Which chat?',
   noSuchChat: 'No chat by that name',
   nothingUnread: 'Nothing is unread',
@@ -126,8 +128,15 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
   }
 }
 
-export function startWaiting(life: Lifetime, shown: Display, body: string): void {
-  const router = new Router({ home: { id: 'waiting', view: () => text({ title: WORDS.title, body }) } })
+export function startWaiting(life: Lifetime, shown: Display, body: string, retry?: () => void): void {
+  const again = action({ id: 'retry', say: 'Try again', run: () => retry?.() })
+  const router = new Router({
+    home: {
+      id: 'waiting',
+      actions: () => (retry ? [again] : []),
+      view: () => (retry ? boxes(page(WORDS.title, body, WORDS.tapToRetry), { on: { tap: again } }) : text({ title: WORDS.title, body })),
+    },
+  })
   life.own(() => router.close())
   new Shell(life, shown.glasses, router)
 }
@@ -561,7 +570,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     home: {
       id: 'chats',
       context: () => 'The list of chats',
-      view: () => list({ title: WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
+      view: () => list({ title: parts.title ?? WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
     },
     actions: () => [open, message, readAll],
   })
