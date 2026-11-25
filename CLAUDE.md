@@ -30,7 +30,8 @@ which rule has which check. A rule with no check yet says so there.
   the words heard in it. No message text and no name of a chat or a person read from Telegram goes to the Worker or
   to a model; a chat said by name is matched on the phone.
 - **S2** The network whitelist in `app.json` is exactly Telegram's web sockets, the Worker and Google's APIs. The
-  bundle names no other URL.
+  bundle names no other address it can connect to. What the Telegram library only reads or prints is listed, each
+  with its reason, in `scripts/store-check.mjs`.
 - **S3** No key in the repo or the bundle: the OpenRouter key and Google's client secret live only on the Worker.
   Telegram's app id is injected at pack time and never committed.
 - **S4** No log, error message or report on any side contains message text, names, numbers, addresses, audio,

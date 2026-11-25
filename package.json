@@ -13,10 +13,13 @@
     "lint": "eslint src && node scripts/architecture.mjs",
     "architecture": "node scripts/architecture.mjs --write",
     "format": "prettier --write .",
-    "check": "prettier --check . && eslint src && node scripts/architecture.mjs && tsc --noEmit && vitest run && vite build && earshot-check app.json dist --allow demo://local"
+    "check": "prettier --check . && eslint src && node scripts/architecture.mjs && tsc --noEmit && vitest run && vite build && node scripts/store-check.mjs dist && npm run build:telegram && node scripts/store-check.mjs dist-telegram",
+    "build:telegram": "VITE_TELEGRAM_API_ID=1 VITE_TELEGRAM_API_HASH=check vite build --outDir dist-telegram"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "0.0.16",
+    "@fuman/net": "0.0.23",
+    "@mtcute/core": "0.32.8",
     "@mtcute/web": "0.32.8",
     "earshot": "github:jarekbird/earshot#v0.0.35"
   },

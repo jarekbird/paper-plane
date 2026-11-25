@@ -1,5 +1,5 @@
 import type { Lifetime } from 'earshot'
-import { TelegramClient } from '@mtcute/web'
+import { BaseTelegramClient, TelegramClient } from '@mtcute/core/client.js'
 import type { Account, Messenger } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 import { messengerOver, type ClientLike } from './messenger.ts'
@@ -8,7 +8,7 @@ import { clientOptions, type TelegramApp } from './options.ts'
 type Heard = (update: { name: string }) => void
 
 export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace): { account: Account; messenger: Messenger } {
-  const make = () => new TelegramClient(clientOptions(app))
+  const make = () => new TelegramClient({ client: new BaseTelegramClient(clientOptions(app)) })
   const heard = new Set<Heard>()
   let current = make()
 

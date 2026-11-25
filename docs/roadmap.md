@@ -42,9 +42,7 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 ## Before the Telegram build can ship
 
 - An app id (my.telegram.org). Without one the build has no Telegram and shows only the sample account.
-- The store check on a build that contains the Telegram library: the library names link formats (`t.me`, `tg://`)
-  and builds its socket address at run time, which Earshot's check and Even's review refuse (rule S2). The build
-  without an app id leaves the library out and passes.
+- A run on real Telegram: sign-in, chats, sending, on Jarek's own account, writing only to Saved Messages.
 
 ## Not now
 

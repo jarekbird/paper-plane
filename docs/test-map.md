@@ -11,8 +11,8 @@ map for this repository; it adds commands and coverage, and replaces none of the
 | sim | None yet. The app in Even's simulator is run by hand (skill `simulator`); there is no simulator test config and no `sim` job in CI | none | none |
 
 `npm run check` is, in order: `prettier --check .`, `eslint src`, `node scripts/architecture.mjs`, `tsc --noEmit`,
-`vitest run`, `vite build`, `earshot-check app.json dist --allow demo://local`. `scripts/ci.test.mjs` holds it to that
-list. CI runs it on every push and pull request (`docs/ci.md`).
+`vitest run`, `vite build`, `node scripts/store-check.mjs dist`, `npm run build:telegram`,
+`node scripts/store-check.mjs dist-telegram`. `scripts/ci.test.mjs` holds it to that list. CI runs it on every push and pull request (`docs/ci.md`).
 
 Cadence, from the shared rule:
 
@@ -38,9 +38,10 @@ focused run in a part you touched.
 - `node scripts/architecture.mjs` (G3 and the module map in `docs/architecture.md`), tested by
   `scripts/architecture.test.mjs`. `npm run architecture` regenerates the map.
 - `scripts/ci.test.mjs`: the shape of CI. Run it with any change to `.github/workflows/` or the `check` script.
-- `earshot-check app.json dist --allow demo://local`, after `npx vite build`: Even Hub's store rules for `app.json`,
-  and every URL in the built files against the whitelist. It reads scripts as JavaScript, so a URL joined from parts
-  is found, and one whose host is only known at run time fails.
+- `node scripts/store-check.mjs <folder>`, after a build into that folder: Even Hub's store rules for `app.json`, and
+  every URL in the built files against the whitelist (Earshot's check). It reads scripts as JavaScript, so a URL
+  joined from parts is found, and one whose host is only known at run time fails. `npm run build:telegram` builds
+  the app with Telegram in it, under a made-up app id, into `dist-telegram`.
 
 The lint rules read syntax, not text: comments and ordinary strings do not trip them, and a name is found however it
 is spelled out (member, destructuring, `['fet' + 'ch']`, a multi-line call). They do not follow values through
@@ -63,7 +64,7 @@ Every rule of `CLAUDE.md` has a row; `scripts/architecture.mjs` fails when one i
 | **G5** | In part, as S1: the question a model would get holds nothing read from Telegram. When `src/voice` exists, a test of the exact request it sends. |
 | **G6** | No check yet: channels are not built. |
 | **S1** | In part: only `src/telegram` imports `@mtcute/*` (`plane/imports`), and `src/glasses/app.test.ts`, "by voice, from any screen": a model that records its question is offered no chat title, message text or saved phrase. What the Worker is sent: no check yet (there is no Worker). |
-| **S2** | In part: `earshot-check` in `npm run check` (no URL in the build outside the whitelist), on the build without an app id, which leaves the Telegram library out. The build with Telegram does not pass it yet: `docs/roadmap.md`, "Before the Telegram build can ship". |
+| **S2** | `node scripts/store-check.mjs` in `npm run check`, on both builds: the one without an app id (`dist`) and the one with Telegram in it (`dist-telegram`, built with a made-up id). It is `earshot-check` with the list `NOT_DESTINATIONS`; `scripts/store-check.test.mjs` holds that list to things no web view can connect to. `src/telegram/transport.test.ts` holds every socket address to the whitelist. `vite.config.ts` strips the two web links the Telegram library carries. |
 | **S3** | In part: the app id is read from `.env.local` at build time (`src/env.d.ts`, `src/main.ts`), and `.gitignore` keeps `.env.*` out. That no key is in the repository or the bundle: no check yet. |
 | **S4** | No check yet. |
 | **S5** | In part: `src/glasses/app.test.ts`, "a reply said aloud" and "a short answer" (shown first, sent only by a tap; chosen by voice, asks for a tap; a row cut short is shown in full first; the text sent is the text shown), and `src/phrases.test.ts` (a saved phrase is kept as the glasses show it). Also there: "a reply kept for later" and "the newest message from someone else" (keeping, liking and saving ask for a tap when said, and a like chosen for one message never lands on a newer one). Calendar events: no check yet. |

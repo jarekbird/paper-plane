@@ -29,7 +29,9 @@ describe('CI (docs/ci.md)', () => {
         'tsc --noEmit',
         'vitest run',
         'vite build',
-        'earshot-check app.json dist --allow demo://local',
+        'node scripts/store-check.mjs dist',
+        'npm run build:telegram',
+        'node scripts/store-check.mjs dist-telegram',
       ].join(' && '),
     )
   })
