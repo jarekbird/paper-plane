@@ -54,6 +54,25 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+// Earshot acts on a navigator's choice from this chance up (its SURE_AT).
+const SURE = 0.7
+const REPLY = 'Reply'
+// Earshot offers an action that has targets as "<name> (show the list)".
+const LISTED = / \(show the list\)$/
+const LIKE = 'Like'
+const SAVE = 'Save'
+const SHORT_FOR: [words: string, action: string][] = [
+  ['like that', LIKE],
+  ['like it', LIKE],
+  ['like this', LIKE],
+  ['save that', SAVE],
+  ['save it', SAVE],
+  ['save this', SAVE],
+]
+const REPLY_LEAD = /^\s*(?:reply|answer|say)\s+/i
+// Tried on typesafe/jev-1.14 on 2026-11-25 (docs/proof/voice/live.md): with this wording the navigator took a dictated reply for a command far less often.
+const A_MESSAGE =
+  'A message to send to the person in the chat on screen. Choose this when the words are something one would write to a person, or are more than one short command'
 const WRITE_MS = 12_000
 const LIKED = '👍'
 // Earshot's list view keeps 20 px left of its rows for the cursor.
@@ -134,6 +153,12 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
     up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
   }
+}
+
+async function unlessSure(asked: Promise<Record<string, number>>, commands: readonly { id: string }[], otherwise: { id: string }) {
+  const chances = await asked
+  const sure = commands.find(option => (chances[option.id] ?? 0) >= SURE)
+  return { [(sure ?? otherwise).id]: 1 }
 }
 
 export function startWaiting(life: Lifetime, shown: Display, body: string, retry?: () => void): void {
@@ -463,7 +488,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     }
     const like = onNewest({
       id: 'like',
-      say: 'Like',
+      say: LIKE,
       hint: 'Sends a thumbs-up to the first message from someone else that is on screen',
       done: WORDS.liked,
       failed: WORDS.notLiked,
@@ -472,7 +497,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     })
     const save = onNewest({
       id: 'save',
-      say: 'Save',
+      say: SAVE,
       hint: 'Copies the first message from someone else that is on screen to Saved Messages',
       done: WORDS.saved,
       failed: WORDS.notSaved,
@@ -481,7 +506,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
 
     const reply: Action = action<string>({
       id: 'reply',
-      say: 'Reply',
+      say: REPLY,
       hint: 'Sends one short answer to the chat on screen',
       risk: 'voice',
       blocked: () => (sending ? WORDS.sending : unseen()),
@@ -658,12 +683,26 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       const command = commandOf(question.words)
       const offered = question.options.filter(option => option.role === undefined)
       const pass = question.options.find(passed => passed.role === 'pass')
-      if (pass && chatOn.has(router.current) && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
-      if (!command || offered.some(option => sameWords(option.say, question.words))) return asked.choose(question, turn)
-      const meant = command === 'message' ? message : open
-      const replying = chatOn.has(router.current) && addressed(question.words, inbox.picked()).matches.length === 0
-      const option = replying ? question.options.find(passed => passed.role === 'pass') : offered.find(one => one.say === meant.say)
-      return option ? Promise.resolve({ [option.id]: 1 }) : asked.choose(question, turn)
+      const replies = pass && chatOn.has(router.current)
+      const short = SHORT_FOR.find(([words]) => sameWords(words, question.words))?.[1]
+      const exact = offered.find(
+        option => sameWords(option.say.replace(LISTED, ''), question.words) || (short && option.say.startsWith(`${short}: `)),
+      )
+      if (exact) return Promise.resolve({ [exact.id]: 1 })
+      if (replies && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
+      if (command) {
+        const meant = command === 'message' ? message : open
+        const replying = replies && addressed(question.words, inbox.picked()).matches.length === 0
+        const option = replying ? pass : offered.find(one => one.say === meant.say)
+        if (option) return Promise.resolve({ [option.id]: 1 })
+      }
+      if (!replies) return asked.choose(question, turn)
+      const answer = (text: string) => sameWords(`${REPLY}: ${question.words.replace(REPLY_LEAD, '')}`, text)
+      const named = offered.find(option => answer(option.say))
+      if (named) return Promise.resolve({ [named.id]: 1 })
+      const commands = offered.filter(option => !option.say.startsWith(`${REPLY}: `))
+      const told = { ...question, options: question.options.map(option => (option === pass ? { ...option, say: A_MESSAGE } : option)) }
+      return unlessSure(asked.choose(told, turn), commands, pass)
     },
   }
 

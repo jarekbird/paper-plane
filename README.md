@@ -24,13 +24,23 @@ you say into a message), in one flow.
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
 sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds. What leaves the phone, in plain words: [PRIVACY.md](PRIVACY.md), and the same on the app's phone page.
 
+### Tried on the real models
+
+- **Voice: 48 of 50** spoken commands and replies did what was meant, on the real navigator model, and nothing was
+  sent without a tap ([docs/proof/voice/live.md](docs/proof/voice/live.md)). In a chat, what you say is the reply
+  unless it clearly is a command.
+- **"Say it short": 93 of 102** instructions came back as the message that was meant, usually in half a second
+  ([docs/proof/say-it-short/live.md](docs/proof/say-it-short/live.md)).
+
 ### State
 
 This is a build in progress, during the hackathon week.
 
-- **Works today:** the glasses screens and the voice flow above, against a built-in sample account, in the simulator.
-- **Next:** signing in to your own Telegram account from the phone, then the list in
-  [docs/roadmap.md](docs/roadmap.md).
+- **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
+  Sign-in to your own account, the voice relay and the writer behind "tell her yes and ask where" are built; the
+  relay is deployed and both models were tried live (below).
+- **Not proven yet:** a run on real Telegram and on real glasses.
+- **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
 ## Run it
 

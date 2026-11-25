@@ -26,7 +26,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |
 | 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        | built; 93 of 102 on the real model |
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
-| 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built but mute, samples  |
+| 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built but mute; 48 of 50 |
 | 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
 | 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         |                          |
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
@@ -58,6 +58,7 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 - One contract test, run against the sample account in CI. Telegram's test servers stopped taking test numbers in
   2026, so against Telegram it runs by hand on Jarek's own account, writing only to Saved Messages.
 - A simulator run per screen, with a recording.
-- A voice test: about 40 phrases against the real navigator, with the score in the README.
+- A voice test: 50 phrases against the real navigator, with the score in the README (`docs/proof/voice/live.md`:
+  48 of 50). Speech-to-text on real glasses is not part of it yet.
 - Failure paths: wrong code, lost connection, Telegram's wait limits.
 - Jarek's pass on real glasses.
