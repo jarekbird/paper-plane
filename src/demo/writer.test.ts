@@ -10,6 +10,7 @@ describe('the sample writer, a stand-in with fixed rules and no model', () => {
     expect(await write('tell her yes and ask where')).toBe('Yes. Where?')
     expect(await write('ask them if Thursday still works')).toBe('Thursday still works?')
     expect(await write('let him know I got the keys')).toBe('I got the keys.')
-    expect(await write('reply that I will call tonight and tell her thanks')).toBe('I will call tonight. Thanks.')
+    expect(await write('reply that I will call tonight and tell her thanks')).toBe('I will call tonight and tell her thanks.')
+    expect(await write('tell her I will call Sam and ask him if he can help')).toBe('I will call Sam and ask him if he can help.')
   })
 })
