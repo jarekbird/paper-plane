@@ -72,7 +72,7 @@ const WORDS = {
   kept: 'Kept as a draft',
   draftWaiting: 'Your phone already has a draft',
   notKept: 'Could not keep it',
-  newestMessage: 'the newest message',
+  newestMessage: 'the top message from someone else',
   nothingFromOthers: 'No message from someone else on screen',
   liked: 'Liked',
   alreadyLiked: 'Already liked',
@@ -115,6 +115,7 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     redraw()
   }
   return {
+    top: at,
     shown: () =>
       lines()
         .slice(at(), at() + ROWS)
@@ -236,38 +237,57 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     let messages: Message[] | null = null
     let failed = false
     let seen: string | null | undefined
-    let loading = 0
+    let shownFor: string | null | undefined
+    let started = 0
+    let pending = false
     let sending = false
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
 
-    const lines = (): readonly string[] => {
-      if (failed) return [WORDS.noLoad]
-      if (messages === null) return [WORDS.loading]
-      if (messages.length === 0) return [WORDS.noMessages]
+    const layout = (): { lines: string[]; blocks: { message: Message; from: number; to: number }[] } => {
+      if (failed) return { lines: [WORDS.noLoad], blocks: [] }
+      if (messages === null) return { lines: [WORDS.loading], blocks: [] }
+      if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [] }
       const chat = inbox.chat(id)
-      const newestFirst = [...messages].reverse().map(message => line(chat, message))
-      return wrapText(cleanText(newestFirst.join('\n\n')), SCREEN_WIDTH)
+      const lines: string[] = []
+      const blocks: { message: Message; from: number; to: number }[] = []
+      for (const message of [...messages].reverse()) {
+        if (lines.length) lines.push('')
+        const wrapped = wrapText(cleanText(line(chat, message)), SCREEN_WIDTH)
+        blocks.push({ message, from: lines.length, to: lines.length + wrapped.length })
+        lines.push(...wrapped)
+      }
+      return { lines, blocks }
     }
-    const scroll = scroller(lines, redraw)
+    const scroll = scroller(() => layout().lines, redraw)
+    const inView = (): Message[] => {
+      const top = scroll.top()
+      return layout()
+        .blocks.filter(block => block.from < top + ROWS && block.to > top)
+        .map(block => block.message)
+    }
 
     const load = async (entered: Lifetime) => {
-      seen = inbox.chat(id)?.last?.id ?? null
-      loading++
+      const turn = ++started
+      const lastId = inbox.chat(id)?.last?.id ?? null
+      seen = lastId
+      pending = true
       let loaded: Message[]
       try {
         loaded = await entered.guard(messenger.history(id, HISTORY))
       } catch (error) {
-        loading--
-        if (error instanceof LifetimeEnded) return
+        if (error instanceof LifetimeEnded || turn !== started) return
+        pending = false
         failed = true
         redraw()
         return
       }
-      loading--
+      if (turn !== started) return
+      pending = false
       messages = loaded
       failed = false
+      shownFor = lastId
       redraw()
       void entered.guard(messenger.read(id)).catch(() => {})
     }
@@ -305,8 +325,8 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
       },
     })
 
-    const current = () => loading === 0 && (inbox.chat(id)?.last?.id ?? null) === seen
-    const newest = () => (current() ? (messages?.findLast(message => !message.mine) ?? null) : null)
+    const current = () => !pending && !failed && messages !== null && (inbox.chat(id)?.last?.id ?? null) === shownFor
+    const newest = () => (current() ? (inView().find(message => !message.mine) ?? null) : null)
     const onNewest = (spec: {
       id: string
       say: string
@@ -356,7 +376,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     const like = onNewest({
       id: 'like',
       say: 'Like',
-      hint: 'Sends a thumbs-up to the newest message from someone else',
+      hint: 'Sends a thumbs-up to the first message from someone else that is on screen',
       done: WORDS.liked,
       failed: WORDS.notLiked,
       refused: message => (message.liked ? WORDS.alreadyLiked : null),
@@ -365,7 +385,7 @@ export function startGlasses(life: Lifetime, glasses: Glasses, parts: GlassesPar
     const save = onNewest({
       id: 'save',
       say: 'Save',
-      hint: 'Copies the newest message from someone else to Saved Messages',
+      hint: 'Copies the first message from someone else that is on screen to Saved Messages',
       done: WORDS.saved,
       failed: WORDS.notSaved,
       act: message => messenger.save(message),

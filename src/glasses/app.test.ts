@@ -773,6 +773,89 @@ describe('the newest message from someone else', () => {
     expect(messenger.saved()).toEqual([])
   })
 
+  it('S5: is not liked or saved while a long reply of the user’s own hides it, and is once the user scrolls to it', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    await messenger.send('sam', Array.from({ length: 30 }, (_, n) => `This is sentence ${n + 1} of one long reply.`).join(' '))
+    await openFirst()
+    expect(fake.lines().join(' ')).not.toContain('Thanks for yesterday.')
+    fake.pick('Like')
+    await settle()
+    expect(fake.overlay()).toContain('No message from someone else on screen')
+    fake.pick('Save')
+    await settle(5_000)
+    expect((await messenger.history('sam', 10)).some(message => message.liked)).toBe(false)
+    expect(messenger.saved()).toEqual([])
+    for (let swipe = 0; swipe < 30 && !fake.lines().join(' ').includes('Thanks for yesterday.'); swipe++) {
+      fake.down()
+      await settle()
+    }
+    fake.pick('Like')
+    await settle()
+    expect((await messenger.history('sam', 10)).filter(message => message.liked).map(message => message.text)).toEqual([
+      'Thanks for yesterday.',
+    ])
+  })
+
+  it('likes the first message from someone else that is in view after scrolling, not a newer one above it', async () => {
+    const { fake, messenger, openFirst } = await world(['sam'])
+    for (let n = 1; n <= 5; n++) messenger.arrive('sam', 'Sam', `Note ${n}`)
+    messenger.arrive('sam', 'Sam', Array.from({ length: 30 }, (_, n) => `Sentence ${n + 1} of a long message from Sam.`).join(' '))
+    await settle()
+    await openFirst()
+    let before = ''
+    for (let swipe = 0; swipe < 40 && fake.lines().join('|') !== before; swipe++) {
+      before = fake.lines().join('|')
+      fake.down()
+      await settle()
+    }
+    await settle(5_000)
+    expect(fake.lines().join(' ')).not.toContain('long message from Sam')
+    const top = fake.lines().find(shown => shown.startsWith('Note'))
+    fake.pick('Like')
+    await settle()
+    const liked = (await messenger.history('sam', 10)).filter(message => message.liked).map(message => message.text)
+    expect(liked).toEqual([top])
+    expect(liked).not.toEqual(['Note 5'])
+  })
+
+  it('A5: is not liked from an old view after a newer message failed to load', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    messenger.history = async () => {
+      throw new Error('offline')
+    }
+    messenger.arrive('anna', 'Anna', 'One more thing')
+    await settle()
+    expect(fake.lines()[1]).toBe('Could not load this chat')
+    fake.pick('Like')
+    await settle()
+    messenger.history = history
+    expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
+  })
+
+  it('A5: shows the newest history when an older load answers last', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    await openFirst()
+    const history = messenger.history
+    const waiting: (() => void)[] = []
+    messenger.history = async (chat, limit) => {
+      const answer = await history(chat, limit)
+      await new Promise<void>(resolve => waiting.push(resolve))
+      return answer
+    }
+    messenger.arrive('anna', 'Anna', 'First of two')
+    await settle()
+    messenger.arrive('anna', 'Anna', 'Second of two')
+    await settle()
+    expect(waiting).toHaveLength(2)
+    waiting[1]()
+    await settle()
+    waiting[0]()
+    await settle()
+    expect(fake.lines()[1]).toBe('Second of two')
+  })
+
   it('is not liked twice', async () => {
     const { fake, openFirst } = await world(['anna'])
     await openFirst()
