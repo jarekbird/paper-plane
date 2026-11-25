@@ -7,10 +7,13 @@ import { display } from './glasses/display.ts'
 import { launch } from './launch.ts'
 import { startPhone } from './phone/page.ts'
 import { appStore } from './store.ts'
+import { hearingThrough } from './voice/hearing.ts'
 
 const id = import.meta.env.VITE_TELEGRAM_API_ID
 const hash = import.meta.env.VITE_TELEGRAM_API_HASH
+const relay = import.meta.env.VITE_RELAY
 const how = launch(location.hash, { id, hash })
+const hearing = how.said ? { transcribe: scriptedSpeech(how.said) } : relay ? hearingThrough(relay) : undefined
 
 const life = new Lifetime()
 const bridge = await waitForEvenAppBridge()
@@ -30,6 +33,6 @@ await startApp({
   store,
   sample: { messenger: demoMessenger(), picks: DEMO_PICKS },
   ...(own ? { telegram: own } : {}),
-  ...(how.said ? { hearing: { transcribe: scriptedSpeech(how.said) } } : {}),
+  ...(hearing ? { hearing } : {}),
   phone: (session, parts) => startPhone(session, document.getElementById('app')!, parts),
 })

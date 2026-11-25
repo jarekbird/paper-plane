@@ -42,6 +42,8 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 ## Before the Telegram build can ship
 
 - An app id (my.telegram.org). Without one the build has no Telegram and shows only the sample account.
+- The Worker (`worker/`), deployed with its OpenRouter key: without `VITE_RELAY` in the build, a hold on real glasses
+  hears nothing.
 - A run on real Telegram: sign-in, chats, sending, on Jarek's own account, writing only to Saved Messages.
 
 ## Not now

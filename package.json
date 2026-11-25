@@ -14,7 +14,7 @@
     "architecture": "node scripts/architecture.mjs --write",
     "format": "prettier --write .",
     "check": "prettier --check . && eslint src && node scripts/architecture.mjs && tsc --noEmit && vitest run && vite build && node scripts/store-check.mjs dist && npm run build:telegram && node scripts/store-check.mjs dist-telegram",
-    "build:telegram": "VITE_TELEGRAM_API_ID=1 VITE_TELEGRAM_API_HASH=check vite build --outDir dist-telegram"
+    "build:telegram": "VITE_TELEGRAM_API_ID=1 VITE_TELEGRAM_API_HASH=check VITE_RELAY=https://paper-plane-relay.jarekbird.workers.dev vite build --outDir dist-telegram"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "0.0.16",

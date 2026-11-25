@@ -62,12 +62,28 @@ The phone page then has a Telegram section: your number, the code Telegram sends
 password if the account has one. To see that section without Telegram, open `http://127.0.0.1:5183/#account=sample`
 and use the code `12345`.
 
+### Voice
+
+Without a relay, a hold hears nothing outside the simulator's `#say=`. The relay is a small Cloudflare Worker
+(`worker/`) that holds an [OpenRouter](https://openrouter.ai) key, so the key is never in the app:
+
+```sh
+npx wrangler deploy --config worker/wrangler.toml
+npx wrangler secret put OPENROUTER_KEY --config worker/wrangler.toml
+```
+
+Then put its address in `.env.local` as `VITE_RELAY=https://…` and in the network whitelist of `app.json`. What it
+is sent: the sound of a hold, and the words heard in it with the names of the app's own actions. Never a chat, a
+person or a message from Telegram.
+
 ## How it is built
 
 - An Even Hub app: web files in the Even Realities App's web view, drawing on the glasses through the Even Hub SDK.
 - On [Earshot](https://github.com/jarekbird/earshot), a voice-first framework for G2 apps: the app declares what it
   can do as actions, and the touchpad, Even's menu and your voice all run those same actions.
 - Telegram is reached as a client, signed in as you, straight from your phone. No server of ours sees your chats.
+- Speech becomes words, and words an action, through OpenRouter (Whisper, and TypeSafe's Jev to choose the action),
+  behind Earshot's relay as a Worker that stores and logs nothing.
 - The rules the code is held to are in [CLAUDE.md](CLAUDE.md), and the checks behind them in
   [docs/test-map.md](docs/test-map.md).
 
