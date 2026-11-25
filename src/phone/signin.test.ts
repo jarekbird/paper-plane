@@ -1,17 +1,18 @@
 import { Lifetime } from 'earshot'
 import { describe, expect, it } from 'vitest'
-import { DEMO_CODE, DEMO_NAME, DEMO_PASSWORD, demoAccount, type DemoSession } from '../demo/account.ts'
-import type { Account } from '../messenger.ts'
+import { DEMO_CODE, DEMO_PASSWORD, DEMO_WHO, demoAccount, type DemoSession } from '../demo/account.ts'
+import type { Account, Who } from '../messenger.ts'
 import { SignIn } from './signin.ts'
 
 const PHONE = '+1 555 010 0199'
+const DEMO_NAME = DEMO_WHO.name
 
 function world(options: { twoStep?: boolean; signedIn?: boolean; wrap?: (account: Account) => Account } = {}) {
   const session: DemoSession = { signedIn: options.signedIn ?? false }
   const life = new Lifetime()
-  const changes: boolean[] = []
+  const changes: (Who | null)[] = []
   const account = demoAccount(session, options.twoStep)
-  const signIn = new SignIn(life, options.wrap ? options.wrap(account) : account, signedIn => void changes.push(signedIn))
+  const signIn = new SignIn(life, options.wrap ? options.wrap(account) : account, who => void changes.push(who))
   return { signIn, session, life, changes }
 }
 
@@ -19,7 +20,7 @@ describe('signing in on the phone', () => {
   it('asks for the number first when nobody is signed in', async () => {
     const { signIn } = world()
     expect(signIn.view().step).toBe('checking')
-    expect(await signIn.start()).toBe(false)
+    expect(await signIn.start()).toBeNull()
     expect(signIn.view()).toEqual({ step: 'phone', busy: false, problem: null, name: null })
   })
 
@@ -30,7 +31,7 @@ describe('signing in on the phone', () => {
     expect(signIn.view().step).toBe('code')
     await signIn.code(DEMO_CODE)
     expect(signIn.view()).toEqual({ step: 'in', busy: false, problem: null, name: DEMO_NAME })
-    expect(changes).toEqual([true])
+    expect(changes).toEqual([DEMO_WHO])
   })
 
   it('asks for the password of an account that has one', async () => {
@@ -44,7 +45,7 @@ describe('signing in on the phone', () => {
     expect(signIn.view()).toMatchObject({ step: 'password', problem: 'That password is not right.' })
     await signIn.password(DEMO_PASSWORD)
     expect(signIn.view().step).toBe('in')
-    expect(changes).toEqual([true])
+    expect(changes).toEqual([DEMO_WHO])
   })
 
   it('says what is wrong in plain words and stays on the step, so the user can try again', async () => {
@@ -94,9 +95,9 @@ describe('signing in on the phone', () => {
     const { signIn } = world({
       wrap: account => ({
         ...account,
-        askCode: async phone => {
+        askCode: async (phone, signal) => {
           asked++
-          await account.askCode(phone)
+          await account.askCode(phone, signal)
         },
       }),
     })
@@ -109,14 +110,14 @@ describe('signing in on the phone', () => {
     expect(signIn.view().step).toBe('code')
   })
 
-  it('A5: lets the user go back to the number, and ignores the answer to the code they left', async () => {
+  it('A5: lets the user go back to the number, and the code they left signs nobody in', async () => {
     let release = () => {}
-    const { signIn, changes } = world({
+    const { signIn, changes, session } = world({
       wrap: account => ({
         ...account,
-        giveCode: async code => {
+        giveCode: async (code, signal) => {
           await new Promise<void>(resolve => (release = resolve))
-          return account.giveCode(code)
+          return account.giveCode(code, signal)
         },
       }),
     })
@@ -129,11 +130,12 @@ describe('signing in on the phone', () => {
     await checking
     expect(signIn.view().step).toBe('phone')
     expect(changes).toEqual([])
+    expect(session.signedIn).toBe(false)
   })
 
   it('is signed in at once on the next launch', async () => {
     const { signIn, changes } = world({ signedIn: true })
-    expect(await signIn.start()).toBe(true)
+    expect(await signIn.start()).toEqual(DEMO_WHO)
     expect(signIn.view()).toMatchObject({ step: 'in', name: DEMO_NAME })
     expect(changes).toEqual([])
   })
@@ -150,14 +152,14 @@ describe('signing in on the phone', () => {
         },
       }),
     })
-    expect(await signIn.start()).toBe(false)
+    expect(await signIn.start()).toBeNull()
     expect(signIn.view()).toMatchObject({ step: 'offline', problem: 'Could not reach Telegram. Try again.' })
     await signIn.phone(PHONE)
     expect(signIn.view().step).toBe('offline')
     online = true
     await signIn.retry()
     expect(signIn.view()).toMatchObject({ step: 'in', name: DEMO_NAME })
-    expect(changes).toEqual([true])
+    expect(changes).toEqual([DEMO_WHO])
   })
 
   it('signs out, and asks for the number again', async () => {
@@ -166,26 +168,34 @@ describe('signing in on the phone', () => {
     await signIn.signOut()
     expect(session.signedIn).toBe(false)
     expect(signIn.view().step).toBe('phone')
-    expect(changes).toEqual([false])
+    expect(changes).toEqual([null])
   })
 
   it('signs out on this phone also when Telegram cannot be told, and says what is left to do', async () => {
-    const { signIn, changes } = world({
-      signedIn: true,
-      wrap: account => ({
-        ...account,
-        signOut: async () => {
-          throw new Error('offline')
-        },
-      }),
-    })
+    const { signIn, changes } = world({ signedIn: true, wrap: account => ({ ...account, signOut: async () => 'untold' }) })
     await signIn.start()
     await signIn.signOut()
     expect(signIn.view()).toMatchObject({
       step: 'phone',
       problem: 'Signed out on this phone. Telegram could not be told: end this session in Telegram, under Devices.',
     })
-    expect(changes).toEqual([false])
+    expect(changes).toEqual([null])
+  })
+
+  it('S5: does not say signed out when the sign-in could not be removed from the phone', async () => {
+    const { signIn, changes } = world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        signOut: async () => {
+          throw new Error('storage is full')
+        },
+      }),
+    })
+    await signIn.start()
+    await signIn.signOut()
+    expect(signIn.view()).toMatchObject({ step: 'in', name: DEMO_NAME, problem: 'Could not sign out on this phone. Try again.' })
+    expect(changes).toEqual([])
   })
 
   it('A4: changes nothing once the app has ended', async () => {

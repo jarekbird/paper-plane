@@ -9,6 +9,8 @@ const PHONE = '+15550100199'
 const CODE = '24680'
 const PASSWORD = 'correct horse'
 const NAME = 'Anna Lee'
+const ME = { id: 4242, displayName: NAME }
+const live = () => new AbortController().signal
 const refuse = (text: string): never => {
   throw new tl.RpcError(400, text as never)
 }
@@ -23,7 +25,7 @@ function telegramSide(twoStep: boolean) {
     const open = () => {
       session = `session-${++issued}`
       sessions.add(session)
-      return { displayName: NAME }
+      return ME
     }
     const self = {
       loops: 0,
@@ -47,14 +49,14 @@ function telegramSide(twoStep: boolean) {
         if (session) sessions.delete(session)
         session = null
       },
-      getMe: async () => (session && sessions.has(session) ? { displayName: NAME } : refuse('AUTH_KEY_UNREGISTERED')),
+      getMe: async () => (session && sessions.has(session) ? ME : refuse('AUTH_KEY_UNREGISTERED')),
       exportSession: async () => session ?? refuse('AUTH_KEY_UNREGISTERED'),
       importSession: async (saved: string) => void (session = saved),
       startUpdatesLoop: async () => void self.loops++,
     }
     return self
   }
-  return { client, revokeAll: () => sessions.clear() }
+  return { client, revokeAll: () => sessions.clear(), open: () => sessions.size }
 }
 
 function world(twoStep: boolean) {
@@ -84,33 +86,71 @@ for (const twoStep of [false, true]) {
 describe('the Telegram account', () => {
   it('keeps the sign-in on the phone, and starts listening for messages once in', async () => {
     const made = world(false)
-    await made.account.askCode(PHONE)
-    await made.account.giveCode(CODE)
+    await made.account.askCode(PHONE, live())
+    expect(await made.account.giveCode(CODE, live())).toEqual({ id: '4242', name: NAME })
     expect(made.saved()).toMatch(/^session-/)
     expect(made.first.loops).toBe(1)
   })
 
   it('forgets a sign-in that was ended from another device, and is signed out', async () => {
     const made = world(false)
-    await made.account.askCode(PHONE)
-    await made.account.giveCode(CODE)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
     made.side.revokeAll()
     expect(await accountOver(new Lifetime(), made.side.client(), made.place).restore()).toBeNull()
     expect(made.saved()).toBeNull()
   })
 
-  it('forgets the sign-in on the phone first, so signing out works with no connection', async () => {
+  it('A5: ends the session again when the user left the attempt while Telegram was answering', async () => {
     const made = world(false)
-    await made.account.askCode(PHONE)
-    await made.account.giveCode(CODE)
-    made.first.logOut = async () => refuse('NETWORK_DOWN')
-    await made.account.signOut().catch(() => {})
+    const signIn = made.first.signIn
+    let answer = () => {}
+    made.first.signIn = async params => {
+      await new Promise<void>(resolve => (answer = resolve))
+      return signIn(params)
+    }
+    await made.account.askCode(PHONE, live())
+    const left = new AbortController()
+    const attempt = made.account.giveCode(CODE, left.signal).catch(() => 'left')
+    left.abort()
+    answer()
+    expect(await attempt).toBe('left')
     expect(made.saved()).toBeNull()
+    expect(made.side.open()).toBe(0)
+    expect(made.first.loops).toBe(0)
+  })
+
+  it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    made.first.logOut = async () => refuse('NETWORK_DOWN')
+    expect(await made.account.signOut()).toBe('untold')
+    expect(made.saved()).toBeNull()
+  })
+
+  it('does not claim a sign-out when the sign-in could not be removed from the phone', async () => {
+    const side = telegramSide(false)
+    let saved: string | null = null
+    let broken = false
+    const place: SessionPlace = {
+      load: async () => saved,
+      save: async session => {
+        if (broken) throw new Error('storage is full')
+        saved = session
+      },
+    }
+    const account = accountOver(new Lifetime(), side.client(), place)
+    await account.askCode(PHONE, live())
+    await account.giveCode(CODE, live())
+    broken = true
+    await expect(account.signOut()).rejects.toThrow()
+    expect(await accountOver(new Lifetime(), side.client(), place).restore()).toEqual({ id: '4242', name: NAME })
   })
 
   it('S4: tells the user what is wrong without passing on Telegram’s own error', async () => {
     const made = world(false)
-    const failed = await made.account.askCode('12').catch(error => error)
+    const failed = await made.account.askCode('12', live()).catch(error => error)
     expect(failed).toBeInstanceOf(SignInError)
     expect(String(failed.message)).toBe('phone')
   })
@@ -120,9 +160,9 @@ describe('the Telegram account', () => {
     let saved: string | null = null
     const life = new Lifetime()
     const account = accountOver(life, side.client(), { load: async () => saved, save: async session => void (saved = session) })
-    await account.askCode(PHONE)
+    await account.askCode(PHONE, live())
     life.end()
-    await account.giveCode(CODE).catch(() => {})
+    await account.giveCode(CODE, live()).catch(() => {})
     expect(saved).toBeNull()
   })
 })

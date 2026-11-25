@@ -1,18 +1,23 @@
-import type { Lifetime } from 'earshot'
+import { LifetimeEnded, type Lifetime } from 'earshot'
 import { tl } from '@mtcute/web'
-import { SignInError, type Account, type SignInProblem } from '../messenger.ts'
+import { SignInError, type Account, type SignInProblem, type Who } from '../messenger.ts'
 
 export interface SessionPlace {
   load(): Promise<string | null>
   save(session: string | null): Promise<void>
 }
 
+export interface UserLike {
+  id: number
+  displayName: string
+}
+
 export interface AuthClientLike {
-  sendCode(params: { phone: string; abortSignal: AbortSignal }): Promise<{ phoneCodeHash: string } | { displayName: string }>
-  signIn(params: { phone: string; phoneCodeHash: string; phoneCode: string }): Promise<{ displayName: string }>
-  checkPassword(password: string): Promise<{ displayName: string }>
+  sendCode(params: { phone: string; abortSignal: AbortSignal }): Promise<{ phoneCodeHash: string } | UserLike>
+  signIn(params: { phone: string; phoneCodeHash: string; phoneCode: string }): Promise<UserLike>
+  checkPassword(password: string): Promise<UserLike>
   logOut(): Promise<unknown>
-  getMe(): Promise<{ displayName: string }>
+  getMe(): Promise<UserLike>
   exportSession(): Promise<string>
   importSession(session: string, force: boolean): Promise<void>
   startUpdatesLoop(): Promise<void>
@@ -39,15 +44,20 @@ function problemOf(error: unknown): SignInError {
 export function accountOver(life: Lifetime, client: AuthClientLike, place: SessionPlace): Account {
   let pending: { phone: string; hash: string } | null = null
 
-  const entered = async (name: string): Promise<{ name: string }> => {
+  const entered = async (user: UserLike, signal: AbortSignal): Promise<Who> => {
+    if (signal.aborted) {
+      await life.guard(Promise.resolve(client.logOut()).catch(() => {}))
+      signal.throwIfAborted()
+    }
     pending = null
     const session = await life.guard(client.exportSession())
     await life.guard(place.save(session))
     await life.guard(client.startUpdatesLoop())
-    return { name }
+    return { id: String(user.id), name: user.displayName }
   }
 
   return {
+    known: async () => (await life.guard(place.load())) !== null,
     restore: async () => {
       const saved = await life.guard(place.load())
       if (saved === null) return null
@@ -55,44 +65,52 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
         await life.guard(client.importSession(saved, true))
         const me = await life.guard(client.getMe())
         await life.guard(client.startUpdatesLoop())
-        return me.displayName
+        return { id: String(me.id), name: me.displayName }
       } catch (error) {
         if (!SIGNED_OUT.some(code => tl.RpcError.is(error, code))) throw error
         await life.guard(place.save(null))
         return null
       }
     },
-    askCode: async phone => {
+    askCode: async (phone, signal) => {
       try {
-        const sent = await life.guard(client.sendCode({ phone, abortSignal: life.signal }))
+        const sent = await life.guard(client.sendCode({ phone, abortSignal: signal }))
         pending = 'phoneCodeHash' in sent ? { phone, hash: sent.phoneCodeHash } : null
       } catch (error) {
         throw problemOf(error)
       }
     },
-    giveCode: async code => {
+    giveCode: async (code, signal) => {
       if (!pending) throw new SignInError('expired')
+      let user: UserLike
       try {
-        const me = await life.guard(client.signIn({ phone: pending.phone, phoneCodeHash: pending.hash, phoneCode: code }))
-        return await life.guard(entered(me.displayName))
+        user = await life.guard(client.signIn({ phone: pending.phone, phoneCodeHash: pending.hash, phoneCode: code }))
       } catch (error) {
         if (tl.RpcError.is(error, 'SESSION_PASSWORD_NEEDED')) return 'password'
         if (tl.RpcError.is(error, 'PHONE_CODE_EXPIRED')) pending = null
         throw problemOf(error)
       }
+      return life.guard(entered(user, signal))
     },
-    givePassword: async password => {
+    givePassword: async (password, signal) => {
+      let user: UserLike
       try {
-        const me = await life.guard(client.checkPassword(password))
-        return await life.guard(entered(me.displayName))
+        user = await life.guard(client.checkPassword(password))
       } catch (error) {
         throw problemOf(error)
       }
+      return life.guard(entered(user, signal))
     },
     signOut: async () => {
       pending = null
       await life.guard(place.save(null))
-      await life.guard(client.logOut())
+      try {
+        await life.guard(client.logOut())
+        return 'told'
+      } catch (error) {
+        if (error instanceof LifetimeEnded) throw error
+        return 'untold'
+      }
     },
   }
 }

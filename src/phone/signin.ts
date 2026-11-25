@@ -1,5 +1,5 @@
 import { LifetimeEnded, type Lifetime } from 'earshot'
-import { SignInError, type Account, type SignInProblem } from '../messenger.ts'
+import { SignInError, type Account, type SignInProblem, type Who } from '../messenger.ts'
 
 export type SignInStep = 'checking' | 'offline' | 'phone' | 'code' | 'password' | 'in'
 
@@ -18,21 +18,22 @@ const PROBLEMS: Record<SignInProblem, string> = {
   wait: 'Telegram asks you to wait a while before trying again.',
   other: 'Could not reach Telegram. Try again.',
 }
-
 const SIGNED_OUT_HERE = 'Signed out on this phone. Telegram could not be told: end this session in Telegram, under Devices.'
+const NOT_SIGNED_OUT = 'Could not sign out on this phone. Try again.'
 
 export class SignIn {
   readonly #life: Lifetime
   readonly #account: Account
   readonly #listeners = new Set<() => void>()
-  readonly #changed: (signedIn: boolean) => void
+  readonly #changed: (who: Who | null) => void
   #view: SignInView = { step: 'checking', busy: true, problem: null, name: null }
-  #turn = 0
+  #attempt = new AbortController()
 
-  constructor(life: Lifetime, account: Account, changed: (signedIn: boolean) => void) {
+  constructor(life: Lifetime, account: Account, changed: (who: Who | null) => void) {
     this.#life = life
     this.#account = account
     this.#changed = changed
+    life.own(() => this.#attempt.abort())
   }
 
   view(): SignInView {
@@ -44,76 +45,81 @@ export class SignIn {
     return () => void this.#listeners.delete(told)
   }
 
-  async start(): Promise<boolean> {
+  async start(): Promise<Who | null> {
     const restored = await this.#run(() => this.#account.restore(), 'offline')
-    if (!restored) return false
-    this.#show(restored.done === null ? { step: 'phone' } : { step: 'in', name: restored.done })
-    return restored.done !== null
+    if (!restored) return null
+    this.#show(restored.done === null ? { step: 'phone' } : { step: 'in', name: restored.done.name })
+    return restored.done
   }
 
   async retry(): Promise<void> {
     if (this.#view.step !== 'offline' || this.#view.busy) return
-    if (await this.start()) this.#changed(true)
+    const who = await this.start()
+    if (who) this.#changed(who)
   }
 
   async phone(number: string): Promise<void> {
     if (this.#view.step !== 'phone' || this.#view.busy) return
     if (number.trim() === '') return this.#show({ problem: PROBLEMS.phone })
-    const asked = await this.#run(() => this.#account.askCode(number.trim()), 'phone')
+    const asked = await this.#run(signal => this.#account.askCode(number.trim(), signal), 'phone')
     if (asked) this.#show({ step: 'code' })
   }
 
   async code(code: string): Promise<void> {
     if (this.#view.step !== 'code' || this.#view.busy) return
-    const given = await this.#run(() => this.#account.giveCode(code.trim()), 'code')
+    const given = await this.#run(signal => this.#account.giveCode(code.trim(), signal), 'code')
     if (!given) return
     if (given.done === 'password') return this.#show({ step: 'password' })
-    this.#entered(given.done.name)
+    this.#entered(given.done)
   }
 
   async password(password: string): Promise<void> {
     if (this.#view.step !== 'password' || this.#view.busy) return
-    const given = await this.#run(() => this.#account.givePassword(password), 'password')
-    if (given) this.#entered(given.done.name)
+    const given = await this.#run(signal => this.#account.givePassword(password, signal), 'password')
+    if (given) this.#entered(given.done)
   }
 
   another(): void {
     if (this.#view.step !== 'code' && this.#view.step !== 'password') return
-    this.#turn++
+    this.#attempt.abort()
     this.#show({ step: 'phone' })
   }
 
   async signOut(): Promise<void> {
     if (this.#view.step !== 'in' || this.#view.busy) return
-    const turn = ++this.#turn
-    this.#view = { ...this.#view, busy: true, problem: null }
-    this.#tell()
-    let told = true
+    const attempt = this.#begin()
+    let told: 'told' | 'untold'
     try {
-      await this.#life.guard(this.#account.signOut())
+      told = await this.#life.guard(this.#account.signOut())
     } catch (error) {
-      if (error instanceof LifetimeEnded) return
-      told = false
+      if (error instanceof LifetimeEnded || attempt.signal.aborted) return
+      return this.#show({ step: 'in', name: this.#view.name, problem: NOT_SIGNED_OUT })
     }
-    if (turn !== this.#turn) return
-    this.#show({ step: 'phone', problem: told ? null : SIGNED_OUT_HERE })
-    this.#changed(false)
+    if (attempt.signal.aborted) return
+    this.#show({ step: 'phone', problem: told === 'told' ? null : SIGNED_OUT_HERE })
+    this.#changed(null)
   }
 
-  #entered(name: string): void {
-    this.#show({ step: 'in', name })
-    this.#changed(true)
+  #entered(who: Who): void {
+    this.#show({ step: 'in', name: who.name })
+    this.#changed(who)
   }
 
-  async #run<T>(work: () => Promise<T>, from: SignInStep): Promise<{ done: T } | null> {
-    const turn = ++this.#turn
+  #begin(): AbortController {
+    this.#attempt.abort()
+    this.#attempt = new AbortController()
     this.#view = { ...this.#view, busy: true, problem: null }
     this.#tell()
+    return this.#attempt
+  }
+
+  async #run<T>(work: (signal: AbortSignal) => Promise<T>, from: SignInStep): Promise<{ done: T } | null> {
+    const attempt = this.#begin()
     try {
-      const done = await this.#life.guard(work())
-      return turn === this.#turn ? { done } : null
+      const done = await this.#life.guard(work(attempt.signal))
+      return attempt.signal.aborted ? null : { done }
     } catch (error) {
-      if (error instanceof LifetimeEnded || turn !== this.#turn) return null
+      if (error instanceof LifetimeEnded || attempt.signal.aborted) return null
       const problem = error instanceof SignInError ? error.problem : 'other'
       this.#show({ step: problem === 'expired' ? 'phone' : from, name: this.#view.name, problem: PROBLEMS[problem] })
       return null

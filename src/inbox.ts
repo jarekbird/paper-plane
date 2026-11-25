@@ -1,8 +1,6 @@
 import type { Lifetime, Store } from 'earshot'
 import type { Chat, Messenger } from './messenger.ts'
 
-export type Scope = 'sample' | 'telegram'
-
 export class Inbox {
   readonly #messenger: Messenger
   readonly #store: Store
@@ -14,10 +12,10 @@ export class Inbox {
   #again = false
   #problem: string | null = null
 
-  constructor(life: Lifetime, messenger: Messenger, store: Store, scope: Scope = 'sample') {
+  constructor(life: Lifetime, messenger: Messenger, store: Store, owner = 'sample') {
     this.#messenger = messenger
     this.#store = store
-    this.#key = `picks:${scope}`
+    this.#key = `picks:${owner}`
     life.own(messenger.onChange(() => void this.refresh()))
   }
 

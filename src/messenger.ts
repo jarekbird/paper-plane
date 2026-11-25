@@ -41,10 +41,16 @@ export class SignInError extends Error {
   }
 }
 
+export interface Who {
+  id: string
+  name: string
+}
+
 export interface Account {
-  restore(): Promise<string | null>
-  askCode(phone: string): Promise<void>
-  giveCode(code: string): Promise<{ name: string } | 'password'>
-  givePassword(password: string): Promise<{ name: string }>
-  signOut(): Promise<void>
+  known(): Promise<boolean>
+  restore(): Promise<Who | null>
+  askCode(phone: string, signal: AbortSignal): Promise<void>
+  giveCode(code: string, signal: AbortSignal): Promise<Who | 'password'>
+  givePassword(password: string, signal: AbortSignal): Promise<Who>
+  signOut(): Promise<'told' | 'untold'>
 }

@@ -12,6 +12,7 @@ import {
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   Shell,
+  text,
   wrapText,
   type Action,
   type Agent,
@@ -123,6 +124,12 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
     up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
   }
+}
+
+export function startWaiting(life: Lifetime, shown: Display, body: string): void {
+  const router = new Router({ home: { id: 'waiting', view: () => text({ title: WORDS.title, body }) } })
+  life.own(() => router.close())
+  new Shell(life, shown.glasses, router)
 }
 
 export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {

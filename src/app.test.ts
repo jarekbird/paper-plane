@@ -2,27 +2,40 @@ import { createStore, Lifetime, memoryPlace, type Store } from 'earshot'
 import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startApp } from './app.ts'
-import { DEMO_CODE, demoAccount, type DemoSession } from './demo/account.ts'
+import { DEMO_CODE, DEMO_WHO, demoAccount, type DemoSession } from './demo/account.ts'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
 import { display } from './glasses/display.ts'
+import type { Account, Who } from './messenger.ts'
 
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
 const SAMPLE_HOME = ['Paper Plane', '> Anna (2)', 'Launch crew (1)', 'Glasses news']
 const NO_PICKS = ['Paper Plane', 'Pick your chats on the phone']
+const CONNECTING = ['Paper Plane', 'Connecting to Telegram…']
 
-async function world(options: { signedIn?: boolean; telegram?: boolean; store?: Store } = {}) {
+interface Options {
+  signedIn?: boolean
+  telegram?: boolean
+  store?: Store
+  who?: Who
+  wrap?: (account: Account) => Account
+}
+
+async function world(options: Options = {}) {
   const life = new Lifetime()
   const fake = fakeBridge()
   const store = options.store ?? createStore([memoryPlace()])
   const session: DemoSession = { signedIn: options.signedIn ?? false }
   const sample = demoMessenger(() => 1_700_000_000_000)
   const own = demoMessenger(() => 1_700_000_000_000)
+  const account = demoAccount(session, false, options.who ?? DEMO_WHO)
+  const phones: string[] = []
   const app = await startApp({
     life,
     display: display(life, fake.bridge),
     store,
     sample: { messenger: sample, picks: DEMO_PICKS },
-    ...(options.telegram === false ? {} : { telegram: { account: demoAccount(session), messenger: own } }),
+    ...(options.telegram === false ? {} : { telegram: { account: options.wrap ? options.wrap(account) : account, messenger: own } }),
+    phone: (_, parts) => void phones.push(parts.note),
   })
   await settle()
   const signIn = async () => {
@@ -30,7 +43,7 @@ async function world(options: { signedIn?: boolean; telegram?: boolean; store?: 
     await app.signIn!.code(DEMO_CODE)
     await settle()
   }
-  return { app, life, fake, store, session, sample, own, signIn }
+  return { app, life, fake, store, session, sample, own, signIn, phones }
 }
 
 beforeEach(() => void vi.useFakeTimers())
@@ -50,10 +63,10 @@ describe('which account the glasses show', () => {
     expect(fake.lines()).toEqual(NO_PICKS)
   })
 
-  it('keeps each account’s picks apart, and the user’s own for the next launch', async () => {
+  it('keeps the user’s picks for the next launch, apart from the sample account’s', async () => {
     const first = await world()
     await first.signIn()
-    await first.app.inbox().pick(['sam'])
+    await first.app.inbox()!.pick(['sam'])
     await settle()
     expect(first.fake.lines()).toEqual(['Paper Plane', '> Sam'])
     const next = await world({ signedIn: true, store: first.store })
@@ -62,6 +75,16 @@ describe('which account the glasses show', () => {
     await next.app.signIn!.signOut()
     await settle()
     expect(next.fake.lines()).toEqual(SAMPLE_HOME)
+  })
+
+  it('S1: gives a second user of the same phone none of the first user’s picks', async () => {
+    const first = await world()
+    await first.signIn()
+    await first.app.inbox()!.pick(['sam', 'launch'])
+    await settle()
+    const second = await world({ signedIn: true, store: first.store, who: { id: 'someone-else', name: 'Someone else' } })
+    expect(second.app.scope()).toBe('telegram')
+    expect(second.fake.lines()).toEqual(NO_PICKS)
   })
 
   it('goes back to the sample account on sign-out, and the sign-in is gone', async () => {
@@ -86,5 +109,50 @@ describe('which account the glasses show', () => {
     const { app, fake } = await world({ telegram: false })
     expect(app.signIn).toBeNull()
     expect(fake.lines()).toEqual(SAMPLE_HOME)
+  })
+})
+
+describe('at launch, while Telegram has not answered yet', () => {
+  const slow = () => {
+    let answer = () => {}
+    const wrap = (account: Account): Account => ({
+      ...account,
+      restore: async () => {
+        await new Promise<void>(resolve => (answer = resolve))
+        return account.restore()
+      },
+    })
+    return { wrap, answer: () => answer() }
+  }
+
+  it('shows a returning user that it is connecting, on the glasses and on the phone, then their own chats', async () => {
+    const telegram = slow()
+    const { app, fake, phones } = await world({ signedIn: true, wrap: telegram.wrap })
+    await settle(30_000)
+    expect(app.scope()).toBe('connecting')
+    expect(fake.lines()).toEqual(CONNECTING)
+    expect(phones).toEqual(['Connecting to Telegram…'])
+    telegram.answer()
+    await settle()
+    expect(app.scope()).toBe('telegram')
+    expect(fake.lines()).toEqual(NO_PICKS)
+  })
+
+  it('shows a new user the sample chats at once', async () => {
+    const telegram = slow()
+    const { app, fake, phones } = await world({ wrap: telegram.wrap })
+    expect(app.scope()).toBe('sample')
+    expect(fake.lines()).toEqual(SAMPLE_HOME)
+    expect(phones).toHaveLength(1)
+  })
+
+  it('falls back to the sample chats when the sign-in turns out to be gone', async () => {
+    const telegram = slow()
+    const made = await world({ signedIn: true, wrap: telegram.wrap })
+    made.session.signedIn = false
+    telegram.answer()
+    await settle()
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.lines()).toEqual(SAMPLE_HOME)
   })
 })

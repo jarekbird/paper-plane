@@ -74,6 +74,7 @@ flowchart LR
   src_demo["src/demo"]
   src_glasses["src/glasses"]
   src_inbox_ts["src/inbox.ts"]
+  src_launch_ts["src/launch.ts"]
   src_main_ts["src/main.ts"]
   src_messenger_contract_ts["src/messenger.contract.ts"]
   src_messenger_ts["src/messenger.ts"]
@@ -104,6 +105,7 @@ flowchart LR
   src_main_ts --> src_app_ts
   src_main_ts --> src_demo
   src_main_ts --> src_glasses
+  src_main_ts --> src_launch_ts
   src_main_ts --> src_phone
   src_main_ts --> src_store_ts
   src_main_ts --> src_telegram

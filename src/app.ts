@@ -1,11 +1,13 @@
-import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
-import { startGlasses, type Hearing } from './glasses/app.ts'
+import type { Lifetime, Store } from 'earshot'
+import { startGlasses, startWaiting, type Hearing } from './glasses/app.ts'
 import type { Display } from './glasses/display.ts'
-import { Inbox, type Scope } from './inbox.ts'
-import type { Account, Messenger } from './messenger.ts'
+import { Inbox } from './inbox.ts'
+import type { Account, Messenger, Who } from './messenger.ts'
 import type { PhoneParts } from './phone/page.ts'
 import { SignIn } from './phone/signin.ts'
 import { Phrases } from './phrases.ts'
+
+export type Scope = 'sample' | 'telegram' | 'connecting'
 
 export interface AppParts {
   life: Lifetime
@@ -20,12 +22,13 @@ export interface AppParts {
 export interface App {
   signIn: SignIn | null
   scope(): Scope
-  inbox(): Inbox
+  inbox(): Inbox | null
 }
 
-const NOTES: Record<Scope, string> = {
+const NOTES = {
   sample: 'These are sample chats. Pick the ones you want on your glasses.',
   telegram: 'Pick the chats you want on your glasses.',
+  connecting: 'Connecting to Telegram…',
 }
 
 export async function startApp(parts: AppParts): Promise<App> {
@@ -33,29 +36,49 @@ export async function startApp(parts: AppParts): Promise<App> {
   const phrases = new Phrases(store)
   await life.guard(phrases.start())
   let session = life.child()
-  let scope: Scope = 'sample'
-  let inbox = new Inbox(session, sample.messenger, store, scope)
+  let scope: Scope = 'connecting'
+  let inbox: Inbox | null = null
 
-  const use = async (next: Scope): Promise<void> => {
+  const wait = () => {
+    session.end()
+    session = life.child()
+    scope = 'connecting'
+    inbox = null
+    startWaiting(session, display, NOTES.connecting)
+    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.connecting })
+  }
+
+  const show = (who: Who | null) => {
     session.end()
     session = life.child()
     const current = session
-    const messenger = next === 'telegram' && telegram ? telegram.messenger : sample.messenger
-    const opened = new Inbox(current, messenger, store, next)
-    scope = next
+    const messenger = who && telegram ? telegram.messenger : sample.messenger
+    const opened = new Inbox(current, messenger, store, who ? `telegram:${who.id}` : 'sample')
+    scope = who ? 'telegram' : 'sample'
     inbox = opened
     startGlasses(current, display, { inbox: opened, messenger, phrases, ...(hearing ? { hearing } : {}) })
-    phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[next] })
-    try {
+    phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope] })
+    const fill = async () => {
       await current.guard(opened.start())
-      if (next === 'sample' && opened.fresh) await current.guard(opened.pick(sample.picks))
-    } catch (error) {
-      if (!(error instanceof LifetimeEnded)) throw error
+      if (!who && opened.fresh) await current.guard(opened.pick(sample.picks))
     }
+    void fill().catch(() => {})
   }
 
-  const signIn: SignIn | null = telegram ? new SignIn(life, telegram.account, signedIn => void use(signedIn ? 'telegram' : 'sample')) : null
-  const signedIn = signIn ? await life.guard(signIn.start()) : false
-  await life.guard(use(signedIn ? 'telegram' : 'sample'))
+  const signIn: SignIn | null = telegram ? new SignIn(life, telegram.account, show) : null
+  const known = telegram ? await life.guard(telegram.account.known()) : false
+  if (known) wait()
+  else show(null)
+  const restore = async (model: SignIn) => {
+    let who: Who | null
+    try {
+      who = await life.guard(model.start())
+    } catch {
+      return
+    }
+    if (who) show(who)
+    else if (known) show(null)
+  }
+  if (signIn) void restore(signIn)
   return { signIn, scope: () => scope, inbox: () => inbox }
 }
