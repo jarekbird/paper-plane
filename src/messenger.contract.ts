@@ -65,6 +65,13 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       expect(await messenger.keep(chat, 'Something else', live)).toBe(false)
     })
 
+    it('keeps only the first of two replies kept for one chat at the same moment', async () => {
+      const { messenger, chat } = await make()
+      const live = new AbortController().signal
+      const kept = await Promise.all([messenger.keep(chat, 'First', live), messenger.keep(chat, 'Second', live)])
+      expect(kept).toEqual([true, false])
+    })
+
     it('A4: keeps nothing for a caller that has already gone', async () => {
       const { messenger, chat } = await make()
       const gone = new AbortController()
