@@ -251,6 +251,30 @@ describe('the Telegram account', () => {
     expect(await attempt).toEqual({ id: '4242', name: NAME })
   })
 
+  it('A5: undoes the sign-in when the user leaves and the step that was running then fails', async () => {
+    const made = world(false)
+    let fail = () => {}
+    made.first.startUpdatesLoop = () => new Promise<void>((_, reject) => (fail = () => reject(new Error('socket closed'))))
+    await made.account.askCode(PHONE, live())
+    const left = new AbortController()
+    const attempt = made.account.giveCode(CODE, left.signal).catch(() => 'left')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    left.abort()
+    fail()
+    expect(await attempt).toBe('left')
+    expect(made.saved()).toBeNull()
+    expect(made.side.open()).toBe(0)
+  })
+
+  it('signs the user in when Telegram needs no code for this number', async () => {
+    const made = world(false)
+    made.first.sendCode = async () => ME
+    made.first.exportSession = async () => 'session-direct'
+    expect(await made.account.askCode(PHONE, live())).toEqual({ id: '4242', name: NAME })
+    expect(made.saved()).not.toBeNull()
+    expect(made.first.loops).toBe(1)
+  })
+
   it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
     const made = world(false)
     await made.account.askCode(PHONE, live())

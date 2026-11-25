@@ -51,7 +51,7 @@ export function accountContract(name: string, make: () => Promise<AccountWorld>)
 
     it('refuses a wrong code, and still takes the right one after it', async () => {
       const world = await make()
-      await world.account.askCode(world.phone, live())
+      expect(await world.account.askCode(world.phone, live())).toBe('code')
       expect(await problem(world.account.giveCode(world.badCode, live()))).toBe('code')
       const step = await world.account.giveCode(world.code, live())
       expect(step === 'password' || step.name.length > 0).toBe(true)

@@ -49,7 +49,7 @@ export interface Who {
 export interface Account {
   known(): Promise<boolean>
   restore(): Promise<Who | null>
-  askCode(phone: string, signal: AbortSignal): Promise<void>
+  askCode(phone: string, signal: AbortSignal): Promise<Who | 'code'>
   giveCode(code: string, signal: AbortSignal): Promise<Who | 'password'>
   givePassword(password: string, signal: AbortSignal): Promise<Who>
   signOut(): Promise<'told' | 'untold'>

@@ -34,6 +34,14 @@ describe('signing in on the phone', () => {
     expect(changes).toEqual([DEMO_WHO])
   })
 
+  it('is signed in straight after the number when Telegram asks for no code', async () => {
+    const { signIn, changes } = world({ wrap: account => ({ ...account, askCode: async () => DEMO_WHO }) })
+    await signIn.start()
+    await signIn.phone(PHONE)
+    expect(signIn.view()).toEqual({ step: 'in', busy: false, problem: null, name: DEMO_NAME })
+    expect(changes).toEqual([DEMO_WHO])
+  })
+
   it('asks for the password of an account that has one', async () => {
     const { signIn, changes } = world({ twoStep: true })
     await signIn.start()
@@ -97,7 +105,7 @@ describe('signing in on the phone', () => {
         ...account,
         askCode: async (phone, signal) => {
           asked++
-          await account.askCode(phone, signal)
+          return account.askCode(phone, signal)
         },
       }),
     })

@@ -63,8 +63,10 @@ export class SignIn {
   async phone(number: string): Promise<void> {
     if (this.#view.step !== 'phone' || this.#view.busy) return
     if (number.trim() === '') return this.#show({ problem: PROBLEMS.phone })
-    const asked = await this.#run(signal => this.#account.askCode(number.trim(), signal), 'phone')
-    if (asked) this.#show({ step: 'code' })
+    const asked = await this.#run(signal => this.#account.askCode(number.trim(), signal), 'phone', true)
+    if (!asked) return
+    if (asked.done === 'code') return this.#show({ step: 'code' })
+    this.#entered(asked.done)
   }
 
   async code(code: string): Promise<void> {

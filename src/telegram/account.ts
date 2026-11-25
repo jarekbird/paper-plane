@@ -63,27 +63,28 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   const entered = async (user: UserLike, signal: AbortSignal): Promise<Who> => {
     const who = { id: String(user.id), name: user.displayName }
     let stored = false
-    const undo = async (failed: boolean): Promise<Who> => {
-      const gone = await life.guard(forget())
-      if (!gone && stored) return who
-      if (failed) throw new SignInError('other')
-      return signal.throwIfAborted() as never
-    }
+    let failed = false
     try {
-      if (signal.aborted) return await life.guard(undo(false))
-      const session = await life.guard(client.exportSession())
-      if (signal.aborted) return await life.guard(undo(false))
-      await life.guard(place.save(session))
-      stored = true
-      if (signal.aborted) return await life.guard(undo(false))
-      await life.guard(client.startUpdatesLoop())
-      if (signal.aborted) return await life.guard(undo(false))
+      if (!signal.aborted) {
+        const session = await life.guard(client.exportSession())
+        if (!signal.aborted) {
+          await life.guard(place.save(session))
+          stored = true
+        }
+        if (!signal.aborted) await life.guard(client.startUpdatesLoop())
+      }
     } catch (error) {
-      if (error instanceof LifetimeEnded || error instanceof SignInError || signal.aborted) throw error
-      return life.guard(undo(true))
+      if (error instanceof LifetimeEnded) throw error
+      failed = true
     }
-    pending = null
-    return who
+    if (!failed && !signal.aborted) {
+      pending = null
+      return who
+    }
+    const gone = await life.guard(forget())
+    if (!gone && stored) return who
+    if (signal.aborted) return signal.throwIfAborted() as never
+    throw new SignInError('other')
   }
 
   return {
@@ -103,12 +104,15 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
       }
     },
     askCode: async (phone, signal) => {
+      let sent: { phoneCodeHash: string } | UserLike
       try {
-        const sent = await life.guard(client.sendCode({ phone, abortSignal: signal }))
-        pending = 'phoneCodeHash' in sent ? { phone, hash: sent.phoneCodeHash } : null
+        sent = await life.guard(client.sendCode({ phone, abortSignal: signal }))
       } catch (error) {
         throw problemOf(error)
       }
+      if (!('phoneCodeHash' in sent)) return life.guard(entered(sent, signal))
+      pending = { phone, hash: sent.phoneCodeHash }
+      return 'code'
     },
     giveCode: async (code, signal) => {
       if (!pending) throw new SignInError('expired')

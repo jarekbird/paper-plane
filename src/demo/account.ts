@@ -24,6 +24,7 @@ export function demoAccount(session: DemoSession, twoStep = false, who: Who = DE
     askCode: async phone => {
       if (phone.replace(/\D/g, '').length < 8) throw new SignInError('phone')
       asked = true
+      return 'code'
     },
     giveCode: async (code, signal) => {
       if (!asked) throw new SignInError('expired')
