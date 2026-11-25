@@ -99,7 +99,7 @@ export async function startApp(parts: AppParts): Promise<App> {
   const restore = async (model: SignIn) => {
     let who: Who | null
     try {
-      who = await life.guard(model.start())
+      who = await life.guard(model.start(known))
     } catch {
       return
     }

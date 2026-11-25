@@ -198,4 +198,26 @@ describe('at launch, while Telegram has not answered yet', () => {
     await settle()
     expect(made.fake.lines()).toEqual(NO_PICKS)
   })
+
+  it('goes to the sample chats when a tap on "try again" gets through and the sign-in turns out to be gone', async () => {
+    let online = false
+    const made = await world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        restore: async () => {
+          if (!online) throw new Error('offline')
+          return account.restore()
+        },
+      }),
+    })
+    expect(made.fake.lines()).toEqual(OFFLINE)
+    made.session.signedIn = false
+    online = true
+    made.fake.tap()
+    await settle()
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.lines()).toEqual(SAMPLE_HOME)
+    expect(made.app.signIn!.view().step).toBe('phone')
+  })
 })

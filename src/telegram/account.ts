@@ -54,13 +54,19 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
       await life.guard(forget())
       return signal.throwIfAborted() as never
     }
-    if (signal.aborted) return left()
-    const session = await life.guard(client.exportSession())
-    if (signal.aborted) return left()
-    await life.guard(place.save(session))
-    if (signal.aborted) return left()
-    await life.guard(client.startUpdatesLoop())
-    if (signal.aborted) return left()
+    try {
+      if (signal.aborted) return await life.guard(left())
+      const session = await life.guard(client.exportSession())
+      if (signal.aborted) return await life.guard(left())
+      await life.guard(place.save(session))
+      if (signal.aborted) return await life.guard(left())
+      await life.guard(client.startUpdatesLoop())
+      if (signal.aborted) return await life.guard(left())
+    } catch (error) {
+      if (error instanceof LifetimeEnded || signal.aborted) throw error
+      await life.guard(forget())
+      throw new SignInError('other')
+    }
     pending = null
     return { id: String(user.id), name: user.displayName }
   }

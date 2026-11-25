@@ -186,6 +186,20 @@ describe('the Telegram account', () => {
     expect(await accountOver(new Lifetime(), side.client(), place).restore()).toBeNull()
   })
 
+  it.each(['exportSession', 'startUpdatesLoop'] as const)(
+    'leaves nobody signed in when %s fails after Telegram took the code',
+    async step => {
+      const made = world(false)
+      made.first[step] = (async () => refuse('NETWORK_DOWN')) as never
+      await made.account.askCode(PHONE, live())
+      const failed = await made.account.giveCode(CODE, live()).catch(error => error)
+      expect(failed).toBeInstanceOf(SignInError)
+      expect(failed.problem).toBe('other')
+      expect(made.saved()).toBeNull()
+      expect(made.side.open()).toBe(0)
+    },
+  )
+
   it('says Telegram was not told when sign-out cannot reach it, with the sign-in already gone from the phone', async () => {
     const made = world(false)
     await made.account.askCode(PHONE, live())

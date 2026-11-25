@@ -162,6 +162,48 @@ describe('signing in on the phone', () => {
     expect(changes).toEqual([DEMO_WHO])
   })
 
+  it('tells the app the user is signed out when "Try again" gets through and the sign-in turns out to be gone', async () => {
+    let online = false
+    const { signIn, changes, session } = world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        restore: async () => {
+          if (!online) throw new Error('offline')
+          return account.restore()
+        },
+      }),
+    })
+    await signIn.start()
+    session.signedIn = false
+    online = true
+    await signIn.retry()
+    expect(signIn.view()).toMatchObject({ step: 'phone', problem: 'Your Telegram sign-in has ended. Sign in again.' })
+    expect(changes).toEqual([null])
+  })
+
+  it('says the sign-in has ended when one was kept and Telegram no longer knows it', async () => {
+    const { signIn } = world()
+    expect(await signIn.start(true)).toBeNull()
+    expect(signIn.view()).toMatchObject({ step: 'phone', problem: 'Your Telegram sign-in has ended. Sign in again.' })
+  })
+
+  it('tells the app nothing when "Try again" still cannot reach Telegram', async () => {
+    const { signIn, changes } = world({
+      signedIn: true,
+      wrap: account => ({
+        ...account,
+        restore: async () => {
+          throw new Error('offline')
+        },
+      }),
+    })
+    await signIn.start()
+    await signIn.retry()
+    expect(signIn.view().step).toBe('offline')
+    expect(changes).toEqual([])
+  })
+
   it('signs out, and asks for the number again', async () => {
     const { signIn, session, changes } = world({ signedIn: true })
     await signIn.start()

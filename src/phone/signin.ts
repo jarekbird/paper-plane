@@ -19,6 +19,7 @@ const PROBLEMS: Record<SignInProblem, string> = {
   other: 'Could not reach Telegram. Try again.',
 }
 const SIGNED_OUT_HERE = 'Signed out on this phone. Telegram could not be told: end this session in Telegram, under Devices.'
+const ENDED = 'Your Telegram sign-in has ended. Sign in again.'
 const NOT_SIGNED_OUT = 'Could not sign out on this phone. Try again.'
 
 export class SignIn {
@@ -45,17 +46,17 @@ export class SignIn {
     return () => void this.#listeners.delete(told)
   }
 
-  async start(): Promise<Who | null> {
+  async start(kept = false): Promise<Who | null> {
     const restored = await this.#run(() => this.#account.restore(), 'offline')
     if (!restored) return null
-    this.#show(restored.done === null ? { step: 'phone' } : { step: 'in', name: restored.done.name })
+    this.#show(restored.done === null ? { step: 'phone', problem: kept ? ENDED : null } : { step: 'in', name: restored.done.name })
     return restored.done
   }
 
   async retry(): Promise<void> {
     if (this.#view.step !== 'offline' || this.#view.busy) return
-    const who = await this.start()
-    if (who) this.#changed(who)
+    const who = await this.start(true)
+    if (who || this.view().step === 'phone') this.#changed(who)
   }
 
   async phone(number: string): Promise<void> {
