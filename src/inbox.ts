@@ -1,11 +1,12 @@
 import type { Lifetime, Store } from 'earshot'
 import type { Chat, Messenger } from './messenger.ts'
 
-const PICKS_KEY = 'picks'
+export type Scope = 'sample' | 'telegram'
 
 export class Inbox {
   readonly #messenger: Messenger
   readonly #store: Store
+  readonly #key: string
   readonly #listeners = new Set<() => void>()
   #chats: Chat[] = []
   #picks: string[] | null = null
@@ -13,9 +14,10 @@ export class Inbox {
   #again = false
   #problem: string | null = null
 
-  constructor(life: Lifetime, messenger: Messenger, store: Store) {
+  constructor(life: Lifetime, messenger: Messenger, store: Store, scope: Scope = 'sample') {
     this.#messenger = messenger
     this.#store = store
+    this.#key = `picks:${scope}`
     life.own(messenger.onChange(() => void this.refresh()))
   }
 
@@ -50,7 +52,7 @@ export class Inbox {
   }
 
   async start(): Promise<void> {
-    const saved = await this.#store.get(PICKS_KEY).catch(() => null)
+    const saved = await this.#store.get(this.#key).catch(() => null)
     this.#picks = saved === null ? null : parsePicks(saved)
     await this.refresh()
   }
@@ -58,7 +60,7 @@ export class Inbox {
   async pick(ids: readonly string[]): Promise<void> {
     this.#picks = [...ids]
     this.#tell()
-    await this.#store.set(PICKS_KEY, JSON.stringify(this.#picks))
+    await this.#store.set(this.#key, JSON.stringify(this.#picks))
   }
 
   refresh(): Promise<void> {

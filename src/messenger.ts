@@ -29,3 +29,22 @@ export interface Messenger {
   like(message: Message): Promise<void>
   onChange(told: () => void): () => void
 }
+
+export type SignInProblem = 'phone' | 'code' | 'expired' | 'password' | 'wait' | 'other'
+
+export class SignInError extends Error {
+  readonly problem: SignInProblem
+
+  constructor(problem: SignInProblem) {
+    super(problem)
+    this.problem = problem
+  }
+}
+
+export interface Account {
+  restore(): Promise<string | null>
+  askCode(phone: string): Promise<void>
+  giveCode(code: string): Promise<{ name: string } | 'password'>
+  givePassword(password: string): Promise<{ name: string }>
+  signOut(): Promise<void>
+}
