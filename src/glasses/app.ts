@@ -25,7 +25,8 @@ import {
 } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Display } from './display.ts'
-import type { Chat, Message, Messenger } from '../messenger.ts'
+import { instructed } from '../instruction.ts'
+import type { Chat, Message, Messenger, Writer } from '../messenger.ts'
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
@@ -41,6 +42,7 @@ export interface GlassesParts {
   messenger: Messenger
   phrases: Phrases
   hearing?: Hearing
+  writer?: Writer
 }
 
 export interface GlassesApp {
@@ -52,6 +54,7 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+const WRITE_MS = 12_000
 const LIKED = '👍'
 // Earshot's list view keeps 20 px left of its rows for the cursor.
 const ROW_WIDTH = SCREEN_WIDTH - 20
@@ -70,6 +73,8 @@ const WORDS = {
   tapToReply: 'Tap to reply',
   tapToSend: 'Tap to send',
   sending: 'Sending…',
+  writing: 'Writing it out…',
+  notWritten: 'Could not write it out',
   sent: 'Sent',
   keeping: 'Keeping…',
   kept: 'Kept as a draft',
@@ -119,6 +124,9 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
   }
   return {
     top: at,
+    reset: () => {
+      top = 0
+    },
     shown: () =>
       lines()
         .slice(at(), at() + ROWS)
@@ -142,7 +150,7 @@ export function startWaiting(life: Lifetime, shown: Display, body: string, retry
 }
 
 export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {
-  const { inbox, messenger, phrases, hearing } = parts
+  const { inbox, messenger, phrases, hearing, writer } = parts
   const { glasses, upToDate } = shown
   const unseen = () => (upToDate() ? null : WORDS.loading)
   const sentIn = new Map<string, (message: Message) => void>()
@@ -154,27 +162,37 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
   const titleOf = (id: string) => inbox.chat(id)?.title ?? 'Chat'
   const redraw = () => shell.redraw()
 
-  const draftScreen = (id: string, given: string): Screen => {
-    const words = showable(given)
-    const lines = wrapText(words, SCREEN_WIDTH)
+  const draftScreen = (id: string, given: string, spoken = false): Screen => {
+    const asSaid = showable(given)
+    let words = asSaid
+    let lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
-    let state: 'ready' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    let state: 'ready' | 'writing' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    let unwritten = spoken && writer !== undefined && instructed(asSaid)
+    const show = (text: string) => {
+      words = text
+      lines = wrapText(words, SCREEN_WIDTH)
+      scroll.reset()
+    }
     const busy = () =>
-      state === 'sending'
-        ? WORDS.sending
-        : state === 'sent'
-          ? WORDS.sent
-          : state === 'keeping'
-            ? WORDS.keeping
-            : state === 'kept'
-              ? WORDS.kept
-              : null
+      state === 'writing'
+        ? WORDS.writing
+        : state === 'sending'
+          ? WORDS.sending
+          : state === 'sent'
+            ? WORDS.sent
+            : state === 'keeping'
+              ? WORDS.keeping
+              : state === 'kept'
+                ? WORDS.kept
+                : null
     let screen: Lifetime | null = null
 
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
+      risk: 'voice',
       blocked: () => busy() ?? unseen(),
       run: async () => {
         if (!screen) return
@@ -225,14 +243,55 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         shell.notice(WORDS.kept)
       },
     })
+    const writeOut = async () => {
+      if (!screen || !writer) return
+      const shown = screen
+      const turn = shown.child()
+      turn.timeout(() => turn.end(), WRITE_MS)
+      const before = state
+      state = 'writing'
+      redraw()
+      let written = ''
+      try {
+        written = showable(await turn.guard(writer.write(asSaid, turn.signal)))
+      } catch {
+        written = ''
+      }
+      turn.end()
+      if (shown.ended) return
+      state = before
+      if (written) show(written)
+      else shell.notice(WORDS.notWritten)
+      redraw()
+    }
+    const write = action({
+      id: 'write',
+      say: 'Write it out',
+      hint: 'Turns what was said into a full message, to check before it is sent',
+      blocked: busy,
+      run: writeOut,
+    })
+    const revert = action({
+      id: 'as-said',
+      say: 'As I said it',
+      hint: 'Puts back the words exactly as they were said',
+      blocked: busy,
+      run: () => {
+        show(asSaid)
+        redraw()
+      },
+    })
     const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
 
     const self: Screen = {
       id: `draft:${id}`,
-      actions: () => [send, keep, scroll.down, scroll.up],
+      actions: () => [send, keep, ...(writer && spoken ? [words === asSaid ? write : revert] : []), scroll.down, scroll.up],
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
+        if (!unwritten) return
+        unwritten = false
+        void writeOut()
       },
       view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
     }
@@ -533,7 +592,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     choose: () => {
       const { matches, rest } = named()
       if (matches.length !== 1) pick(matches)
-      else if (showable(rest)) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest))
+      else if (showable(rest)) router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest, true))
       else router.jump(chatScreen(matches[0].id))
     },
     run: chat => router.open(chatScreen(chat.id)),
@@ -588,8 +647,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     const on = held && router.current === held ? chatOn.get(held) : undefined
     const words = showable(heard.words)
     if (!on || !words) return { kind: 'notMine' }
-    if (on.covers) router.replace(draftScreen(on.chat, words))
-    else router.open(draftScreen(on.chat, words))
+    if (on.covers) router.replace(draftScreen(on.chat, words, true))
+    else router.open(draftScreen(on.chat, words, true))
     return { kind: 'handled' }
   }
 
@@ -598,6 +657,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     choose: (question, turn) => {
       const command = commandOf(question.words)
       const offered = question.options.filter(option => option.role === undefined)
+      const pass = question.options.find(passed => passed.role === 'pass')
+      if (pass && chatOn.has(router.current) && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
       if (!command || offered.some(option => sameWords(option.say, question.words))) return asked.choose(question, turn)
       const meant = command === 'message' ? message : open
       const replying = chatOn.has(router.current) && addressed(question.words, inbox.picked()).matches.length === 0

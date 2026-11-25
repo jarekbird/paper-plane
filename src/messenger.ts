@@ -54,3 +54,7 @@ export interface Account {
   givePassword(password: string, signal: AbortSignal): Promise<Who>
   signOut(): Promise<'told' | 'untold'>
 }
+
+export interface Writer {
+  write(words: string, signal: AbortSignal): Promise<string>
+}

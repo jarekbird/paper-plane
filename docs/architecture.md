@@ -74,6 +74,7 @@ flowchart LR
   src_demo["src/demo"]
   src_glasses["src/glasses"]
   src_inbox_ts["src/inbox.ts"]
+  src_instruction_ts["src/instruction.ts"]
   src_launch_ts["src/launch.ts"]
   src_main_ts["src/main.ts"]
   src_messenger_contract_ts["src/messenger.contract.ts"]
@@ -85,6 +86,7 @@ flowchart LR
   src_store_ts["src/store.ts"]
   src_telegram["src/telegram"]
   src_voice["src/voice"]
+  src_writer_contract_ts["src/writer.contract.ts"]
   src_account_contract_ts --> src_messenger_ts
   src_app_ts --> earshot
   src_app_ts --> src_glasses
@@ -92,9 +94,11 @@ flowchart LR
   src_app_ts --> src_messenger_ts
   src_app_ts --> src_phone
   src_app_ts --> src_phrases_ts
+  src_demo --> src_instruction_ts
   src_demo --> src_messenger_ts
   src_glasses --> earshot
   src_glasses --> src_inbox_ts
+  src_glasses --> src_instruction_ts
   src_glasses --> src_messenger_ts
   src_glasses --> src_names_ts
   src_glasses --> src_phrases_ts
@@ -122,6 +126,10 @@ flowchart LR
   src_telegram --> earshot
   src_telegram --> src_messenger_ts
   src_voice --> earshot
+  src_voice --> src_instruction_ts
+  src_voice --> src_messenger_ts
+  src_writer_contract_ts --> src_instruction_ts
+  src_writer_contract_ts --> src_messenger_ts
 ```
 
 Enforced by `eslint.config.js`:

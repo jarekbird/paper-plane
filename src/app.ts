@@ -2,7 +2,7 @@ import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
 import { startGlasses, startWaiting, type Hearing } from './glasses/app.ts'
 import type { Display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
-import type { Account, Messenger, Who } from './messenger.ts'
+import type { Account, Messenger, Who, Writer } from './messenger.ts'
 import type { PhoneParts } from './phone/page.ts'
 import { SignIn } from './phone/signin.ts'
 import { Phrases } from './phrases.ts'
@@ -16,6 +16,7 @@ export interface AppParts {
   sample: { messenger: Messenger; picks: readonly string[] }
   telegram?: { account: Account; messenger: Messenger }
   hearing?: Hearing
+  writer?: Writer
   phone?: (session: Lifetime, parts: PhoneParts) => void
 }
 
@@ -34,7 +35,7 @@ const NOTES = {
 const SAMPLE_TITLE = 'Sample chats'
 
 export async function startApp(parts: AppParts): Promise<App> {
-  const { life, display, store, sample, telegram, hearing, phone } = parts
+  const { life, display, store, sample, telegram, hearing, writer, phone } = parts
   const phrases = new Phrases(store)
   await life.guard(phrases.start())
   let session = life.child()
@@ -64,6 +65,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       messenger,
       phrases,
       ...(hearing ? { hearing } : {}),
+      ...(writer ? { writer } : {}),
     })
     phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope] })
     const fill = async () => {
