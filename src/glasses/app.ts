@@ -54,21 +54,9 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
-// Earshot acts on a navigator's choice from this chance up (its SURE_AT).
-const SURE = 0.7
+// Where a reply can be meant: on typesafe/jev-1.14 on 2026-11-25 every command tried scored 0.68 or more ("go home" the lowest) and no dictated reply reached 0.6 for a command but one harmless scroll (docs/proof/voice/live.md).
+const SURE = 0.6
 const REPLY = 'Reply'
-// Earshot offers an action that has targets as "<name> (show the list)".
-const LISTED = / \(show the list\)$/
-const LIKE = 'Like'
-const SAVE = 'Save'
-const SHORT_FOR: [words: string, action: string][] = [
-  ['like that', LIKE],
-  ['like it', LIKE],
-  ['like this', LIKE],
-  ['save that', SAVE],
-  ['save it', SAVE],
-  ['save this', SAVE],
-]
 const REPLY_LEAD = /^\s*(?:reply|answer|say)\s+/i
 // Tried on typesafe/jev-1.14 on 2026-11-25 (docs/proof/voice/live.md): with this wording the navigator took a dictated reply for a command far less often.
 const A_MESSAGE =
@@ -488,7 +476,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     }
     const like = onNewest({
       id: 'like',
-      say: LIKE,
+      say: 'Like',
       hint: 'Sends a thumbs-up to the first message from someone else that is on screen',
       done: WORDS.liked,
       failed: WORDS.notLiked,
@@ -497,7 +485,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     })
     const save = onNewest({
       id: 'save',
-      say: SAVE,
+      say: 'Save',
       hint: 'Copies the first message from someone else that is on screen to Saved Messages',
       done: WORDS.saved,
       failed: WORDS.notSaved,
@@ -684,13 +672,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       const offered = question.options.filter(option => option.role === undefined)
       const pass = question.options.find(passed => passed.role === 'pass')
       const replies = pass && chatOn.has(router.current)
-      const short = SHORT_FOR.find(([words]) => sameWords(words, question.words))?.[1]
-      const exact = offered.find(
-        option => sameWords(option.say.replace(LISTED, ''), question.words) || (short && option.say.startsWith(`${short}: `)),
-      )
-      if (exact) return Promise.resolve({ [exact.id]: 1 })
       if (replies && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
-      if (command) {
+      if (command && !offered.some(option => sameWords(option.say, question.words))) {
         const meant = command === 'message' ? message : open
         const replying = replies && addressed(question.words, inbox.picked()).matches.length === 0
         const option = replying ? pass : offered.find(one => one.say === meant.say)
@@ -698,8 +681,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       }
       if (!replies) return asked.choose(question, turn)
       const answer = (text: string) => sameWords(`${REPLY}: ${question.words.replace(REPLY_LEAD, '')}`, text)
-      const named = offered.find(option => answer(option.say))
-      if (named) return Promise.resolve({ [named.id]: 1 })
+      const answered = offered.find(option => answer(option.say))
+      if (answered) return Promise.resolve({ [answered.id]: 1 })
       const commands = offered.filter(option => !option.say.startsWith(`${REPLY}: `))
       const told = { ...question, options: question.options.map(option => (option === pass ? { ...option, say: A_MESSAGE } : option)) }
       return unlessSure(asked.choose(told, turn), commands, pass)

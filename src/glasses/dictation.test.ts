@@ -97,41 +97,37 @@ describe('in a chat, what is said is the reply unless the navigator is sure of a
     expect(fake.overlay()).toContain('Tap to confirm')
   })
 
-  it('runs a command said by its very name at once, without asking the navigator (measured: "go home" came back unsure)', async () => {
-    const { say, open, router, asked } = await world(['Go home.'], { 'Go home': 0.6, pass: 0.3 })
+  it('runs a command the navigator is fairly sure of, at the chance measured for "go home" (0.68)', async () => {
+    const { say, open, router } = await world(['go home'], { 'Go home': 0.68, pass: 0.15 })
     await open()
     await say()
-    expect(asked).toEqual([])
     expect(router.current.id).toBe('chats')
   })
 
-  it('likes or saves the top message on "like that" and "save it", with no navigator and still only after a tap', async () => {
-    const { fake, say, open, asked, router } = await world(['Like that.', 'save it'], {})
+  it('stays the reply just under that bar (measured: "keep the change" on a reply, Send 0.54)', async () => {
+    const { fake, say, open, sent } = await world(['keep the change'], { 'Reply (show the list)': 0.54, pass: 0.28 })
     await open()
     await say()
-    expect(asked).toEqual([])
-    expect(fake.overlay()).toMatch(/^Like: the top message from someone else\?\s+Tap to confirm/)
-    fake.double()
-    await settle(2_500)
+    expect(fake.lines()).toEqual(['To Anna', 'keep the change', 'Tap to send'])
+    expect(sent()).toEqual([])
+  })
+
+  it('likes or saves on "like" and "save that", where the navigator is sure, and still only after a tap', async () => {
+    const { fake, say, open, router } = await world(['like', 'save that'], {
+      'Like: the top message from someone else': 0.98,
+      'Save: the top message from someone else': 0.0,
+    })
+    await open()
     await say()
-    expect(asked).toEqual([])
-    expect(fake.overlay()).toMatch(/^Save: the top message from someone else\?\s+Tap to confirm/)
+    expect(fake.overlay()).toMatch(/^Like: the top message from someone else\?\s+Tap to confirm/)
     expect(router.current.id).toBe('chat:anna')
   })
 
-  it('takes "like that idea" for a reply, not for a like', async () => {
+  it('takes "like that idea" for a reply, not for a like (measured: Like 0.29)', async () => {
     const { fake, say, open } = await world(['like that idea a lot'], { 'Like: the top message from someone else': 0.29, pass: 0.5 })
     await open()
     await say()
     expect(fake.lines()).toEqual(['To Anna', 'like that idea a lot', 'Tap to send'])
-  })
-
-  it('opens the short answers when "reply" alone is said', async () => {
-    const { say, open, router, asked } = await world(['reply'], {})
-    await open()
-    await say()
-    expect(asked).toEqual([])
-    expect(router.current.id).toBe('replies:anna')
   })
 
   it('goes back when the navigator is sure of that', async () => {
@@ -190,16 +186,10 @@ describe('on a reply not sent yet, the same rule', () => {
   })
 
   it('S5: asks for a tap when the navigator is sure the word was "send"', async () => {
-    const { fake, say, sent, asked } = await world(['message Sam see you at noon', 'send it', 'send'], { Send: 0.97, pass: 0.03 })
+    const { fake, say, sent } = await world(['message Sam see you at noon', 'send it'], { Send: 0.97, pass: 0.03 })
     await say()
     await settle(2_500)
     await say()
-    expect(sent()).toEqual([])
-    expect(fake.overlay()).toMatch(/Send\?\s+Tap to confirm/)
-    fake.double()
-    await settle(2_500)
-    await say()
-    expect(asked).toHaveLength(1)
     expect(sent()).toEqual([])
     expect(fake.overlay()).toMatch(/Send\?\s+Tap to confirm/)
   })

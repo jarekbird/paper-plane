@@ -6,9 +6,9 @@ the words are given as heard.
 
 - **48 of 50** holds did what was meant.
 - Nothing was sent without a tap in any of them.
-- 24 of the 50 never asked the model: the phone read them itself (a chat said by name, a command said
-  by its very name, an instruction such as "tell her …"). The others took the model 199 ms at the median,
-  436 ms at the slowest, through the relay.
+- 10 of the 50 never asked the model: the phone read them itself (a chat said by name, a short
+  answer said word for word, an instruction such as "tell her …"). The others took the model 193 ms at the median,
+  413 ms at the slowest, through the relay.
 
 Before the rule "in a chat, what is said is the reply unless the navigator is sure of a command", the same kind of
 run got 22 of 42: a plain dictated reply was often answered with "Which one?".
@@ -75,9 +75,13 @@ The two misses:
 
 What the rule is (`src/glasses/app.ts`, tests in `src/glasses/dictation.test.ts`), on a screen that takes a reply:
 
-1. A command said by its very name ("go back", "send", "scroll down") runs at once, with no model. So do "like
-   that" and "save that".
-2. A short answer is offered only when its very words are said ("thanks", "reply on my way"), never for a sentence
+1. A short answer is offered only when its very words are said ("thanks", "reply on my way"), never for a sentence
    that merely means the same.
-3. Otherwise the navigator is asked, and its choice counts only when it is sure (0.7, Earshot's own bar). Anything
-   less is the reply, shown to check, sent by a tap.
+2. Otherwise the navigator is asked, and its choice counts as a command only from a chance of 0.6 up. Anything less
+   is the reply, shown to check, sent by a tap.
+
+Where 0.6 comes from: asked three times each, every command tried scored 0.68 or more ("go home" 0.68 to 0.69,
+"like that" 0.70 to 0.77, "go back" 0.87 to 0.90, "send" 0.97), and of 20 dictated replies none reached 0.6 for a
+command but "scroll through the photos I sent" (Scroll down, 0.57 to 0.62), which only scrolls. The nearest others:
+"keep the change" on a reply (Send, 0.49 to 0.54) and "send me the address when you can" (Send, 0.44 to 0.47). Send,
+Keep, Like, Save, Reply, Undo and Mark all read ask for a tap in any case.
