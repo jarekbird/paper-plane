@@ -1,35 +1,21 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { loadEnv } from 'vite'
 import { storeCheck } from './store-check.mjs'
 
 const OUT = 'build/pack'
 const FILE = 'build/paper-plane.ehpk'
 
-export function parts(env) {
+export function parts(folder) {
+  const env = loadEnv('production', folder, 'VITE_')
   return {
     telegram: Boolean(env.VITE_TELEGRAM_API_ID && env.VITE_TELEGRAM_API_HASH),
     voice: Boolean(env.VITE_RELAY),
   }
 }
 
-export function envOf(text) {
-  return Object.fromEntries(
-    text
-      .split('\n')
-      .map(line => /^\s*(VITE_[A-Z_]+)\s*=\s*(.*?)\s*$/.exec(line))
-      .filter(Boolean)
-      .map(([, name, value]) => [name, value]),
-  )
-}
-
 if (import.meta.url === `file://${process.argv[1]}`) {
-  let local = ''
-  try {
-    local = readFileSync('.env.local', 'utf8')
-  } catch {
-    local = ''
-  }
-  const has = parts({ ...envOf(local), ...process.env })
+  const has = parts(process.cwd())
   const { version } = JSON.parse(readFileSync('app.json', 'utf8'))
   rmSync(OUT, { recursive: true, force: true })
   mkdirSync('build', { recursive: true })
