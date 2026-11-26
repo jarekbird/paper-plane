@@ -1,13 +1,24 @@
 import { TroubleError, type Chat, type Messenger } from '../messenger.ts'
 import { sentBefore, signedOut, troubleOf, type Within } from './trouble.ts'
-import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type MessageLike, type SponsoredLike } from './map.ts'
+import {
+  foldersChanged,
+  LIKE,
+  sponsoredId,
+  toChat,
+  toMessage,
+  type DialogLike,
+  type FolderLike,
+  type MessageLike,
+  type SponsoredLike,
+} from './map.ts'
 
-export interface ClientLike<Id> {
-  iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<DialogLike>
+export interface ClientLike<Id, D extends DialogLike = DialogLike> {
+  folders(): Promise<FolderLike<D>[]>
+  iterDialogs(params: { limit: number; archived: 'keep' }): AsyncIterable<D>
   getHistory(chat: number, params: { limit: number }): Promise<MessageLike[]>
   randomId(): Id
   sendText(chat: number, text: string, params: { abortSignal: AbortSignal; randomId: Id }): Promise<MessageLike>
-  readHistory(chat: number): Promise<void>
+  readHistory(chat: number, params: { clearMentions: true }): Promise<void>
   deleteMessagesById(chat: number, ids: number[], params: { revoke: boolean }): Promise<void>
   getPeerDialogs(chat: number): Promise<(DialogLike | null)[]>
   saveDraft(chat: number, draft: { message: string }): Promise<void>
@@ -23,6 +34,14 @@ export interface ClientLike<Id> {
     add(listener: (state: LinkState) => void): void
     remove(listener: (state: LinkState) => void): void
   }
+  onRawUpdate: {
+    add(listener: (told: RawLike) => void): void
+    remove(listener: (told: RawLike) => void): void
+  }
+}
+
+export interface RawLike {
+  update: { _: string }
 }
 
 export type LinkState = 'offline' | 'connecting' | 'updating' | 'connected'
@@ -42,7 +61,10 @@ const DIALOGS = 100
 const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'history_read'])
 export const GRACE_MS = 3_000
 
-export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now = Date.now }: Asking): Messenger & { close(): void } {
+export function messengerOver<Id, D extends DialogLike = DialogLike>(
+  client: ClientLike<Id, D>,
+  { within, session, now = Date.now }: Asking,
+): Messenger & { close(): void } {
   const listeners = new Set<() => void>()
   const keeping = new Map<string, Promise<boolean>>()
   const ads = new Map<string, Uint8Array>()
@@ -61,8 +83,12 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
     downSince = up ? null : now()
     changed()
   }
+  const refiled = (told: RawLike) => {
+    if (foldersChanged(told)) changed()
+  }
   client.onUpdate.add(heard)
   client.onConnectionState.add(linked)
+  client.onRawUpdate.add(refiled)
 
   const ask = async <T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     const era = session.era()
@@ -87,13 +113,21 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
     close: () => {
       client.onUpdate.remove(heard)
       client.onConnectionState.remove(linked)
+      client.onRawUpdate.remove(refiled)
+    },
+    folders: async () => {
+      const folders = await ask(() => client.folders())
+      return folders.map(folder => ({ id: String(folder.id), title: folder.title }))
     },
     chats: () =>
       ask(async signal => {
+        const folders = await client.folders()
+        signal.throwIfAborted()
         const chats: Chat[] = []
-        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) {
+        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'keep' })) {
           signal.throwIfAborted()
-          chats.push(toChat(dialog))
+          const chat = toChat(dialog, folders)
+          if (!dialog.isArchived || chat.folders.length) chats.push(chat)
         }
         return chats
       }),
@@ -121,7 +155,7 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
       return toMessage(sent)
     },
     read: async chat => {
-      await ask(() => client.readHistory(Number(chat)))
+      await ask(() => client.readHistory(Number(chat), { clearMentions: true }))
       changed()
     },
     unsend: async message => {

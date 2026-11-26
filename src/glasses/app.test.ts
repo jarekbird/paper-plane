@@ -57,7 +57,38 @@ afterEach(() => void vi.useRealTimers())
 describe('the list of chats', () => {
   it('shows only the chats the user picked, with how many messages are new', async () => {
     const { fake } = await world(['anna', 'launch'])
-    expect(fake.lines()).toEqual(['Paper Plane', '> Anna (2)', 'Launch crew (1)'])
+    expect(fake.lines()).toEqual(['Paper Plane', '> Anna (2)', '@ Launch crew (1)'])
+  })
+
+  it('marks a chat in which a new message mentions the user, and no longer once it was read', async () => {
+    const { fake, messenger } = await world(['sam', 'launch'])
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew (1)', 'Sam'])
+    messenger.arrive('sam', 'Sam', '@you Are you there?', true)
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Sam (1)', '@ Launch crew (1)'])
+    await messenger.read('sam')
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew (1)', 'Sam'])
+  })
+
+  it('clears a mention whose message was already read elsewhere, once its chat is opened, and counts it for "mark all read"', async () => {
+    const { fake, messenger, openFirst } = await world(['launch'])
+    messenger.readElsewhere('launch')
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew'])
+    expect(fake.menuItems().map(item => item.name)).toContain('Mark all read')
+    await openFirst()
+    fake.double()
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> Launch crew'])
+  })
+
+  it('lists the chats with something new first, and the others below in Telegram’s order', async () => {
+    const { fake, messenger } = await world(['news', 'sam', 'launch', 'anna'])
+    expect(fake.lines()).toEqual(['Paper Plane', '> Anna (2)', '@ Launch crew (1)', 'Glasses news', 'Sam'])
+    await messenger.read('anna')
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew (1)', 'Anna', 'Glasses news', 'Sam'])
   })
 
   it('says where to pick chats when none is picked', async () => {
@@ -123,7 +154,7 @@ describe('a chat', () => {
   it('names who wrote each message in a group', async () => {
     const { fake, openFirst } = await world(['launch'])
     await openFirst()
-    expect(fake.lines()[1]).toBe('Cy: Can someone confirm the demo time for Thursday?')
+    expect(fake.lines()[1]).toBe('Cy: @you Can you confirm the demo time for Thursday?')
   })
 
   it('marks a message read that arrives while the chat is open', async () => {

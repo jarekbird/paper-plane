@@ -19,6 +19,8 @@ function fakeClient() {
     { type: 'chat', id: -1005678, displayName: 'Glasses news', chatType: 'channel' },
   ]
   const unread = new Map<number, number>([[-1001234, 2]])
+  const mentions = new Map<number, number>([[-1001234, 1]])
+  const archived = new Set<number>()
   const messages: MessageLike[] = []
   const drafts = new Map<number, string>()
   const forwarded: string[] = []
@@ -32,6 +34,7 @@ function fakeClient() {
   }
   const listeners = new Set<(update: { name: string }) => void>()
   const links = new Set<(state: LinkState) => void>()
+  const raws = new Set<(told: { update: { _: string } }) => void>()
   const asked: string[] = []
   const ended: number[] = []
   const used = new Set<number>()
@@ -62,10 +65,16 @@ function fakeClient() {
   add(peers[1], peers[1], 'Cy joined', true)
 
   const client: ClientLike<number> = {
+    folders: async () => [
+      { id: 2, title: 'Groups', has: dialog => dialog.peer.type === 'chat' },
+      { id: 3, title: 'Nobody', has: () => false },
+    ],
     iterDialogs: async function* () {
       const dialogs: DialogLike[] = peers.map(entry => ({
         peer: entry,
         unreadCount: unread.get(entry.id) ?? 0,
+        unreadMentionsCount: mentions.get(entry.id) ?? 0,
+        isArchived: archived.has(entry.id),
         lastMessage: of(entry.id).at(-1) ?? null,
         draftMessage: drafts.has(entry.id) ? { text: drafts.get(entry.id)! } : null,
       }))
@@ -81,7 +90,10 @@ function fakeClient() {
       losing = false
       throw new Error('the connection closed before the answer')
     },
-    readHistory: async chat => void unread.set(chat, 0),
+    readHistory: async (chat, { clearMentions }) => {
+      unread.set(chat, 0)
+      if (clearMentions) mentions.set(chat, 0)
+    },
     deleteMessagesById: async (chat, ids) => {
       for (const id of ids) {
         const at = messages.findIndex(message => message.chat.id === chat && message.id === id)
@@ -89,7 +101,14 @@ function fakeClient() {
       }
     },
     getPeerDialogs: async chat => [
-      { peer: peer(chat), unreadCount: 0, lastMessage: null, draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null },
+      {
+        peer: peer(chat),
+        unreadCount: 0,
+        unreadMentionsCount: 0,
+        isArchived: false,
+        lastMessage: null,
+        draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null,
+      },
     ],
     saveDraft: async (chat, draft) => void drafts.set(chat, draft.message),
     forwardMessagesById: async ({ fromChatId, messages: ids }) => {
@@ -104,6 +123,7 @@ function fakeClient() {
     viewSponsored: async randomId => void viewed.push(Array.from(randomId).join(',')),
     onUpdate: { add: listener => void listeners.add(listener), remove: listener => void listeners.delete(listener) },
     onConnectionState: { add: listener => void links.add(listener), remove: listener => void links.delete(listener) },
+    onRawUpdate: { add: listener => void raws.add(listener), remove: listener => void raws.delete(listener) },
   }
   const answering = <A extends unknown[], R>(name: string, call: (...args: A) => Promise<R>) =>
     (async (...args: A) => {
@@ -119,6 +139,7 @@ function fakeClient() {
       if (refused) throw refused
       yield* dialogs(params)
     },
+    folders: answering('folders', client.folders),
     getHistory: answering('getHistory', client.getHistory),
     sendText: answering('sendText', client.sendText),
     readHistory: answering('readHistory', client.readHistory),
@@ -149,7 +170,12 @@ function fakeClient() {
     loseAnswer: () => void (losing = true),
     later: (ms: number) => void (since += ms),
     signedInAgain: () => void era++,
-    listening: () => listeners.size + links.size,
+    archive: (entry: PeerLike) => {
+      peers.push(entry)
+      archived.add(entry.id)
+    },
+    listening: () => listeners.size + links.size + raws.size,
+    raw: (name: string) => raws.forEach(listener => listener({ update: { _: name } })),
     emit: (name: string) => listeners.forEach(listener => listener({ name })),
     link: (state: LinkState) => links.forEach(listener => listener(state)),
   }
@@ -162,6 +188,9 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
     messenger: messengerOver(fake.client, fake.asking),
     chat: '42',
     unreadChat: '-1001234',
+    mentionedChat: '-1001234',
+    folder: { title: 'Groups', chats: ['-1001234', '-1005678'] },
+    emptyFolder: async () => 'Nobody',
     channel: '-1005678',
     saved: async () => fake.forwarded,
     sponsoredSeen: async () => fake.viewed.length,
@@ -192,6 +221,43 @@ describe('the Telegram adapter', () => {
     messengerOver(fake.client, fake.asking).onChange(() => told++)
     for (const name of ['new_message', 'edit_message', 'delete_message', 'history_read', 'user_typing', 'user_status']) fake.emit(name)
     expect(told).toBe(4)
+  })
+
+  it.each([
+    'updateDialogFilter',
+    'updateDialogFilterOrder',
+    'updateDialogFilters',
+    'updateFolderPeers',
+    'updateNotifySettings',
+    'updateDialogUnreadMark',
+    'updateReadMessagesContents',
+    'updateChannelReadMessagesContents',
+  ])(
+    'tells listeners on %s: a folder was changed, a chat was archived, muted or marked unread, or a mention was read on another device',
+    name => {
+      const fake = fakeClient()
+      let told = 0
+      messengerOver(fake.client, fake.asking).onChange(() => told++)
+      fake.raw(name)
+      expect(told).toBe(1)
+    },
+  )
+
+  it('tells listeners nothing for a raw update that changes no folder', () => {
+    const fake = fakeClient()
+    let told = 0
+    messengerOver(fake.client, fake.asking).onChange(() => told++)
+    for (const name of ['updateUserTyping', 'updateConfig', 'updateUserStatus']) fake.raw(name)
+    expect(told).toBe(0)
+  })
+
+  it('lists an archived chat only when it is in one of the user’s folders, so a picked folder is whole', async () => {
+    const fake = fakeClient()
+    fake.archive({ type: 'chat', id: -1009001, displayName: 'Old project', chatType: 'supergroup' })
+    fake.archive({ type: 'user', id: 77, displayName: 'Someone archived' })
+    const chats = await messengerOver(fake.client, fake.asking).chats()
+    const archived = chats.filter(chat => ['-1009001', '77'].includes(chat.id))
+    expect(archived.map(chat => [chat.id, chat.folders.map(folder => folder.title)])).toEqual([['-1009001', ['Groups']]])
   })
 
   it('leaves a service notice such as "Cy joined" out of a chat’s history', async () => {

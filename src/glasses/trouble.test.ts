@@ -13,7 +13,7 @@ const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
 const tone = (ms: number) => new Uint8Array(new Int16Array((ms / 1000) * SAMPLE_RATE).map((_, at) => 8_000 * Math.sin(at / 5)).buffer)
 const UNREACHABLE: Trouble = { kind: 'unreachable' }
 const WAIT: Trouble = { kind: 'wait', seconds: 90 }
-const HOME = ['Paper Plane', '> Anna (2)', 'Launch crew (1)']
+const HOME = ['Paper Plane', '> Anna (2)', '@ Launch crew (1)']
 const ANNA = [
   'Anna',
   'I can do 12:30 at the usual place.',

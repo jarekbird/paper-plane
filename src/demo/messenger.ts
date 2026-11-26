@@ -1,21 +1,43 @@
-import { TroubleError, type Chat, type ChatKind, type Message, type Messenger, type Sponsored, type Trouble } from '../messenger.ts'
+import {
+  TroubleError,
+  type Chat,
+  type ChatKind,
+  type Folder,
+  type Message,
+  type Messenger,
+  type Sponsored,
+  type Trouble,
+} from '../messenger.ts'
 
 interface DemoChat {
   id: string
   title: string
   kind: ChatKind
   unread: number
+  mentions: number
+  folders: Folder[]
   messages: Message[]
 }
 
 const MINUTE = 60_000
 
-const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines: [from: string, text: string][] }[] = [
+const FRIENDS: Folder = { id: 'friends', title: 'Friends' }
+const WORK: Folder = { id: 'work', title: 'Work' }
+const SCRIPT: {
+  id: string
+  title: string
+  kind: ChatKind
+  unread: number
+  mentions?: number
+  folders: Folder[]
+  lines: [from: string, text: string][]
+}[] = [
   {
     id: 'anna',
     title: 'Anna',
     kind: 'person',
     unread: 2,
+    folders: [FRIENDS],
     lines: [
       ['You', 'Running the demo at four.'],
       ['Anna', 'Nice. Are we still on for lunch first?'],
@@ -27,10 +49,12 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines
     title: 'Launch crew',
     kind: 'group',
     unread: 1,
+    mentions: 1,
+    folders: [WORK],
     lines: [
       ['Ben', 'Build is green.'],
       ['You', 'Shipping after the review.'],
-      ['Cy', 'Can someone confirm the demo time for Thursday?'],
+      ['Cy', '@you Can you confirm the demo time for Thursday?'],
     ],
   },
   {
@@ -38,6 +62,7 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines
     title: 'Glasses news',
     kind: 'channel',
     unread: 0,
+    folders: [WORK],
     lines: [['Glasses news', 'Heads Up build week has started.']],
   },
   {
@@ -45,6 +70,7 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines
     title: 'Sam',
     kind: 'person',
     unread: 0,
+    folders: [FRIENDS],
     lines: [['Sam', 'Thanks for yesterday.']],
   },
 ]
@@ -58,7 +84,7 @@ export const DEMO_SPONSORED: Sponsored = {
 }
 
 export interface DemoMessenger extends Messenger {
-  arrive(chat: string, from: string, text: string): Message
+  arrive(chat: string, from: string, text: string, mentions?: boolean): Message
   edit(message: Message, text: string): void
   sent(): readonly Message[]
   saved(): readonly Message[]
@@ -66,6 +92,9 @@ export interface DemoMessenger extends Messenger {
   drafts(): ReadonlyMap<string, string>
   trouble(next: Trouble | null): void
   loseAnswer(): void
+  readElsewhere(chat: string): void
+  file(chat: string, folders: readonly Folder[]): void
+  unfile(folder: string): void
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
@@ -77,6 +106,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const drafts = new Map<string, string>()
   const unanswered = new WeakSet<object>()
   let trouble: Trouble | null = null
+  let shelf: Folder[] = [FRIENDS, WORK]
   let losing = false
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
@@ -93,6 +123,8 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     title: entry.title,
     kind: entry.kind,
     unread: entry.unread,
+    mentions: entry.mentions ?? 0,
+    folders: entry.folders,
     messages: entry.lines.map(([from, text], index) => message(entry.id, from, text, started - (entry.lines.length - index) * MINUTE)),
   }))
   const reach = () => {
@@ -116,8 +148,14 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
         title: chat.title,
         kind: chat.kind,
         unread: chat.unread,
+        mentions: chat.mentions,
+        folders: chat.folders,
         last: chat.messages.at(-1) ?? null,
       }))
+    },
+    folders: async () => {
+      reach()
+      return [...shelf]
     },
     history: async (id, limit) => {
       reach()
@@ -142,8 +180,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     read: async id => {
       reach()
       const chat = find(id)
-      if (chat.unread === 0) return
+      if (chat.unread === 0 && chat.mentions === 0) return
       chat.unread = 0
+      chat.mentions = 0
       tell()
     },
     unsend: async sent => {
@@ -190,11 +229,12 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       listeners.add(told)
       return () => void listeners.delete(told)
     },
-    arrive: (id, from, text) => {
+    arrive: (id, from, text, mentions = false) => {
       const chat = find(id)
       const arrived = message(id, from, text, now())
       chat.messages.push(arrived)
       chat.unread++
+      if (mentions) chat.mentions++
       tell()
       return arrived
     },
@@ -208,6 +248,20 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     sent: () => outbox,
     saved: () => kept,
     drafts: () => drafts,
+    file: (id, folders) => {
+      find(id).folders = [...folders]
+      for (const folder of folders) if (!shelf.some(known => known.id === folder.id)) shelf.push(folder)
+      tell()
+    },
+    unfile: id => {
+      shelf = shelf.filter(folder => folder.id !== id)
+      for (const chat of chats) chat.folders = chat.folders.filter(folder => folder.id !== id)
+      tell()
+    },
+    readElsewhere: id => {
+      find(id).unread = 0
+      tell()
+    },
     loseAnswer: () => {
       losing = true
     },

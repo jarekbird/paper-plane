@@ -10,11 +10,18 @@ export interface Message {
   liked: boolean
 }
 
+export interface Folder {
+  id: string
+  title: string
+}
+
 export interface Chat {
   id: string
   title: string
   kind: ChatKind
+  folders: Folder[]
   unread: number
+  mentions: number
   last: Message | null
 }
 
@@ -27,6 +34,7 @@ export interface Sponsored {
 
 export interface Messenger {
   chats(): Promise<Chat[]>
+  folders(): Promise<Folder[]>
   history(chat: string, limit: number): Promise<Message[]>
   send(chat: string, text: string, attempt?: object): Promise<Message | null>
   read(chat: string): Promise<void>

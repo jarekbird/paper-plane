@@ -8,6 +8,13 @@ messengerContract('the sample account', async () => {
     messenger,
     chat: 'sam',
     unreadChat: 'anna',
+    mentionedChat: 'launch',
+    folder: { title: 'Work', chats: ['launch', 'news'] },
+    emptyFolder: async () => {
+      messenger.file('anna', [])
+      messenger.file('sam', [])
+      return 'Friends'
+    },
     channel: 'news',
     saved: async () => messenger.saved().map(message => message.text),
     sponsoredSeen: async () => messenger.seenSponsored().length,
@@ -26,5 +33,11 @@ describe('the sample account', () => {
     const messenger = demoMessenger()
     messenger.arrive('sam', 'Sam', 'Hello')
     expect((await messenger.chats()).find(chat => chat.id === 'sam')?.unread).toBe(1)
+  })
+
+  it('counts a message that mentions the user, when it arrives', async () => {
+    const messenger = demoMessenger()
+    messenger.arrive('sam', 'Sam', '@you Are you there?', true)
+    expect((await messenger.chats()).find(chat => chat.id === 'sam')).toMatchObject({ unread: 1, mentions: 1 })
   })
 })

@@ -1,5 +1,5 @@
 import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
-import type { Chat, Messenger } from './messenger.ts'
+import type { Chat, Folder, Messenger } from './messenger.ts'
 import { troubleWords } from './trouble.ts'
 
 export class Inbox {
@@ -9,6 +9,7 @@ export class Inbox {
   readonly #key: string
   readonly #listeners = new Set<() => void>()
   #chats: Chat[] = []
+  #folders: Folder[] = []
   #picks: string[] | null = null
   #loading: Promise<void> | null = null
   #again = false
@@ -40,7 +41,15 @@ export class Inbox {
 
   picked(): Chat[] {
     const picks = this.picks()
-    return this.#chats.filter(chat => picks.includes(chat.id))
+    const picked = this.#chats.filter(chat => picks.includes(chat.id) || chat.folders.some(folder => picks.includes(folderPick(folder))))
+    return [...picked.filter(hasNew), ...picked.filter(chat => !hasNew(chat))]
+  }
+
+  folders(): { folder: Folder; chats: number }[] {
+    return this.#folders.map(folder => ({
+      folder,
+      chats: this.#chats.filter(chat => chat.folders.some(one => folderPick(one) === folderPick(folder))).length,
+    }))
   }
 
   chat(id: string): Chat | undefined {
@@ -81,11 +90,21 @@ export class Inbox {
 
   async #load(): Promise<void> {
     try {
-      this.#chats = await this.#life.guard(this.#messenger.chats())
+      const [chats, folders] = await this.#life.guard(Promise.all([this.#messenger.chats(), this.#messenger.folders()]))
+      this.#chats = chats
+      this.#folders = folders
       this.#problem = null
     } catch (error) {
       if (error instanceof LifetimeEnded) return
       this.#problem = troubleWords(error, 'Telegram is not answering')
+      this.#tell()
+      return
+    }
+    const picks = this.#picks ?? []
+    const kept = picks.filter(pick => !pick.startsWith(FOLDER) || this.#folders.some(folder => folderPick(folder) === pick))
+    if (kept.length !== picks.length) {
+      this.#picks = kept
+      void this.#store.set(this.#key, JSON.stringify(kept)).catch(() => {})
     }
     this.#tell()
   }
@@ -94,6 +113,12 @@ export class Inbox {
     for (const listener of [...this.#listeners]) listener()
   }
 }
+
+export const hasNew = (chat: Chat): boolean => chat.unread > 0 || chat.mentions > 0
+
+const FOLDER = 'folder:'
+
+export const folderPick = (folder: Folder): string => `${FOLDER}${folder.id}:${folder.title}`
 
 function parsePicks(saved: string): string[] {
   try {

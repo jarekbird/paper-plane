@@ -1,4 +1,4 @@
-import type { Chat, ChatKind, Message } from '../messenger.ts'
+import type { Chat, ChatKind, Folder, Message } from '../messenger.ts'
 
 export interface PeerLike {
   type: 'user' | 'chat'
@@ -22,6 +22,8 @@ export interface MessageLike {
 export interface DialogLike {
   peer: PeerLike
   unreadCount: number
+  unreadMentionsCount: number
+  isArchived: boolean
   lastMessage: MessageLike | null
   draftMessage: { text: string } | null
 }
@@ -67,13 +69,35 @@ export function toMessage(message: MessageLike): Message {
   }
 }
 
-export function toChat(dialog: DialogLike): Chat {
+const FOLDER_CHANGES = new Set([
+  'updateDialogFilter',
+  'updateDialogFilterOrder',
+  'updateDialogFilters',
+  'updateFolderPeers',
+  'updateNotifySettings',
+  'updateDialogUnreadMark',
+  'updateReadMessagesContents',
+  'updateChannelReadMessagesContents',
+])
+
+export const foldersChanged = (told: { update: { _: string } }): boolean => FOLDER_CHANGES.has(told.update._)
+
+export interface FolderLike<D> {
+  id: number
+  title: string
+  has(dialog: D): boolean
+}
+
+export function toChat<D extends DialogLike>(dialog: D, folders: readonly FolderLike<D>[] = []): Chat {
   const last = dialog.lastMessage
+  const within: Folder[] = folders.filter(folder => folder.has(dialog)).map(folder => ({ id: String(folder.id), title: folder.title }))
   return {
     id: chatId(dialog.peer),
     title: dialog.peer.displayName,
     kind: kindOf(dialog.peer),
+    folders: within,
     unread: dialog.unreadCount,
+    mentions: dialog.unreadMentionsCount,
     last: last && !last.isService ? toMessage(last) : null,
   }
 }

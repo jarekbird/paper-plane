@@ -11,7 +11,7 @@ you say into a message), in one flow.
 
 | On the glasses                       | How                                                                |
 | ------------------------------------ | ------------------------------------------------------------------ |
-| Your picked chats, with what is new  | You choose the chats on the phone; nothing else reaches the glasses |
+| Your picked chats, with what is new  | You choose the chats on the phone, one by one or a whole Telegram folder; nothing else reaches the glasses. Chats with something new come first, and `@` marks one where you were mentioned |
 | The newest message of a chat         | Tap a chat                                                         |
 | A reply by voice                     | Hold, speak, check the words, tap to send                          |
 | A message from a few words           | In a chat, hold and say "tell her yes and ask where": it is written out, you check it, tap |
