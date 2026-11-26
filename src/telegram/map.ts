@@ -23,6 +23,7 @@ export interface DialogLike {
   peer: PeerLike
   unreadCount: number
   unreadMentionsCount: number
+  isArchived: boolean
   lastMessage: MessageLike | null
   draftMessage: { text: string } | null
 }

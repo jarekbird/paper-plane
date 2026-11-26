@@ -14,7 +14,7 @@ import {
 
 export interface ClientLike<Id, D extends DialogLike = DialogLike> {
   folders(): Promise<FolderLike<D>[]>
-  iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<D>
+  iterDialogs(params: { limit: number; archived: 'keep' }): AsyncIterable<D>
   getHistory(chat: number, params: { limit: number }): Promise<MessageLike[]>
   randomId(): Id
   sendText(chat: number, text: string, params: { abortSignal: AbortSignal; randomId: Id }): Promise<MessageLike>
@@ -124,9 +124,10 @@ export function messengerOver<Id, D extends DialogLike = DialogLike>(
         const folders = await client.folders()
         signal.throwIfAborted()
         const chats: Chat[] = []
-        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) {
+        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'keep' })) {
           signal.throwIfAborted()
-          chats.push(toChat(dialog, folders))
+          const chat = toChat(dialog, folders)
+          if (!dialog.isArchived || chat.folders.length) chats.push(chat)
         }
         return chats
       }),

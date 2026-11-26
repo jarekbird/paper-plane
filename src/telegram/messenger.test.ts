@@ -20,6 +20,7 @@ function fakeClient() {
   ]
   const unread = new Map<number, number>([[-1001234, 2]])
   const mentions = new Map<number, number>([[-1001234, 1]])
+  const archived = new Set<number>()
   const messages: MessageLike[] = []
   const drafts = new Map<number, string>()
   const forwarded: string[] = []
@@ -73,6 +74,7 @@ function fakeClient() {
         peer: entry,
         unreadCount: unread.get(entry.id) ?? 0,
         unreadMentionsCount: mentions.get(entry.id) ?? 0,
+        isArchived: archived.has(entry.id),
         lastMessage: of(entry.id).at(-1) ?? null,
         draftMessage: drafts.has(entry.id) ? { text: drafts.get(entry.id)! } : null,
       }))
@@ -103,6 +105,7 @@ function fakeClient() {
         peer: peer(chat),
         unreadCount: 0,
         unreadMentionsCount: 0,
+        isArchived: false,
         lastMessage: null,
         draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null,
       },
@@ -167,6 +170,10 @@ function fakeClient() {
     loseAnswer: () => void (losing = true),
     later: (ms: number) => void (since += ms),
     signedInAgain: () => void era++,
+    archive: (entry: PeerLike) => {
+      peers.push(entry)
+      archived.add(entry.id)
+    },
     listening: () => listeners.size + links.size + raws.size,
     raw: (name: string) => raws.forEach(listener => listener({ update: { _: name } })),
     emit: (name: string) => listeners.forEach(listener => listener({ name })),
@@ -223,6 +230,15 @@ describe('the Telegram adapter', () => {
     for (const name of ['updateDialogFilter', 'updateDialogFilterOrder', 'updateDialogFilters', 'updateUserTyping', 'updateConfig'])
       fake.raw(name)
     expect(told).toBe(3)
+  })
+
+  it('lists an archived chat only when it is in one of the user’s folders, so a picked folder is whole', async () => {
+    const fake = fakeClient()
+    fake.archive({ type: 'chat', id: -1009001, displayName: 'Old project', chatType: 'supergroup' })
+    fake.archive({ type: 'user', id: 77, displayName: 'Someone archived' })
+    const chats = await messengerOver(fake.client, fake.asking).chats()
+    const archived = chats.filter(chat => ['-1009001', '77'].includes(chat.id))
+    expect(archived.map(chat => [chat.id, chat.folders.map(folder => folder.title)])).toEqual([['-1009001', ['Groups']]])
   })
 
   it('leaves a service notice such as "Cy joined" out of a chat’s history', async () => {
