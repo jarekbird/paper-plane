@@ -483,10 +483,9 @@ describe('the Google sign-in on the phone', () => {
   }
 
   it('A5: does not count a cancelled connect the phone could not put back, once Google has ended that sign-in, and removes it when the phone can', async () => {
-    const { made, outcome, told, before, removable } = await cancelledWhileWritten(true)
+    const { made, outcome, told, removable } = await cancelledWhileWritten(true)
     expect(outcome).toBe('left')
     expect(told()).toBe(0)
-    expect(made.account.signIn()).toBe(before)
     expect(made.side.revoked).toHaveLength(1)
     expect(await made.account.known()).toBe(false)
     expect(made.kept()).not.toBeNull()
@@ -548,6 +547,53 @@ describe('the Google sign-in on the phone', () => {
     },
   )
 
+  it.each(['ends it', 'cannot be told'])(
+    'A5: a cancelled connect the phone could not put back is no sign-in while Google is still being asked, and the one it wrote over has ended, when Google %s',
+    async outcome => {
+      const side = googleSide()
+      let kept: string | null = null
+      let failing = false
+      let held: (() => void) | null = null
+      const place: GooglePlace = {
+        load: async () => kept,
+        save: async next => {
+          if (failing && (next === null || next === earlier)) throw new Error('the store is full')
+          if (failing) await new Promise<void>(resolve => (held = resolve))
+          kept = next
+        },
+      }
+      const revoking: (() => void)[] = []
+      const ask: typeof fetch = async (input, init) => {
+        if (!String(input).includes('/revoke')) return side.ask(input, init)
+        await new Promise<void>(resolve => revoking.push(resolve))
+        if (outcome === 'cannot be told') throw new Error('offline')
+        return side.ask(input, init)
+      }
+      const account = googleAccount(new Lifetime(), { relay: 'https://relay.example', place, ask, now: () => 1_800_000_000_000 })
+      expect(await account.finish(side.consent(await account.begin()), live())).toBe(true)
+      const earlier = kept
+      const generation = account.signIn()
+      let told = 0
+      account.onChange(() => told++)
+      failing = true
+      const leaving = new AbortController()
+      const finishing = account.finish(side.consent(await account.begin()), leaving.signal).catch(() => 'left')
+      await until(() => held !== null)
+      leaving.abort()
+      held!()
+      await until(() => revoking.length === 1)
+      expect(kept).not.toBe(earlier)
+      expect(told).toBe(1)
+      expect(await account.known()).toBe(false)
+      expect(account.signIn()).not.toBe(generation)
+      await expect(account.token(generation, live())).rejects.toBeInstanceOf(GoogleEnded)
+      revoking[0]()
+      expect(await finishing).toBe(outcome === 'ends it' ? 'left' : true)
+      expect(await account.known()).toBe(outcome === 'cannot be told')
+      expect(told).toBe(outcome === 'ends it' ? 1 : 2)
+    },
+  )
+
   it.each(['can remove nothing', 'works again'])(
     'A5: counts a second cancelled connect that could not be undone, though one before it was set aside, while the phone’s store %s',
     async storage => {
@@ -578,8 +624,11 @@ describe('the Google sign-in on the phone', () => {
       first = kept
       expect(first).not.toBeNull()
       expect(await account.known()).toBe(false)
+      let told = 0
+      account.onChange(() => told++)
       side.deaf(true)
       expect(await cancelled()).toBe(true)
+      expect(told).toBe(1)
       const second = kept
       expect(second).not.toBe(first)
       removable = storage === 'works again'

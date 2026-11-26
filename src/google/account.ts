@@ -180,6 +180,7 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       if (typeof refresh !== 'string' || typeof access !== 'string') throw new Error('The sign-in could not be picked up')
       if (verifier === secret) verifier = null
       const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
+      let displaced = false
       const write = async (): Promise<'kept' | 'left' | 'unkept' | 'stuck'> => {
         try {
           return await life.guard(
@@ -192,7 +193,11 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
                 signIn++
                 return 'kept'
               }
-              return (await life.guard(stored(before))) ? 'left' : 'stuck'
+              if (await life.guard(stored(before))) return 'left'
+              displaced = before !== orphan && parsed(before) !== null
+              orphan = next
+              signIn++
+              return 'stuck'
             }),
           )
         } catch (error) {
@@ -205,14 +210,15 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
         tell()
         return true
       }
+      if (displaced) tell()
       const ended = await life.guard(revoke(refresh))
-      if (kept === 'stuck') {
+      if (kept === 'stuck' && !ended) {
         const stays = await life.guard(
           inTurn(async () => {
             if (!(await life.guard(holds(next)))) return false
-            orphan = ended ? next : null
-            if (!ended) signIn++
-            return !ended
+            orphan = null
+            signIn++
+            return true
           }),
         )
         if (stays) {
