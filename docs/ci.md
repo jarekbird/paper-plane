@@ -26,11 +26,12 @@ this page keeps an unchecked commit off `main`.
 By hand, from Tower, and only when Jarek says "ship": nothing is uploaded to the Even Hub by CI or by an agent on its
 own. `evenhub` is signed in on Tower only.
 
-1. In a clean checkout of `origin/main`, with `.env.local` holding `VITE_RELAY` and, once there is one, Telegram's
-   app id (`VITE_TELEGRAM_API_ID`, `VITE_TELEGRAM_API_HASH`; never committed, S3): `npm ci`, `npm run check`.
+1. In a clean checkout of `origin/main`, with `.env.local` holding `VITE_RELAY`, Telegram's app id
+   (`VITE_TELEGRAM_API_ID`, `VITE_TELEGRAM_API_HASH`; never committed, S3) and, only once the deployed Worker has
+   Google's client id and secret, `VITE_GOOGLE_CALENDAR=on`: `npm ci`, `npm run check`.
 2. Set the next version in `app.json` and `package.json`.
 3. `npm run pack`: builds, runs the store check on that very build, and writes `build/paper-plane.ehpk`. Its last
-   line says whether the pack has Telegram and voice in it.
+   line says whether the pack has Telegram, voice and Google Calendar in it.
 4. The first time, `npx evenhub create build/paper-plane.ehpk --name "Paper Plane" --tagline "<one line>"` makes the
    app on the Even Hub. After that, `npx evenhub upload build/paper-plane.ehpk -m "<what is new>"`. Then
    `npx evenhub promote <version> --to beta`.

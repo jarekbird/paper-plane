@@ -12,7 +12,7 @@ function folder(files) {
   return dir
 }
 
-const SETTINGS = ['VITE_TELEGRAM_API_ID', 'VITE_TELEGRAM_API_HASH', 'VITE_RELAY']
+const SETTINGS = ['VITE_TELEGRAM_API_ID', 'VITE_TELEGRAM_API_HASH', 'VITE_RELAY', 'VITE_GOOGLE_CALENDAR']
 const given = new Map()
 
 beforeEach(() => {
@@ -33,23 +33,31 @@ afterEach(() => {
 describe('what a pack says it holds, read the way the build reads it', () => {
   it('says Telegram and voice are in when .env.local sets all three', () => {
     const dir = folder({ '.env.local': 'VITE_TELEGRAM_API_ID=123\nVITE_TELEGRAM_API_HASH=abc\nVITE_RELAY=https://relay.example\n' })
-    expect(parts(dir)).toEqual({ telegram: true, voice: true })
+    expect(parts(dir)).toEqual({ telegram: true, voice: true, calendar: false })
   })
 
   it('says a part is not in when its setting is there but empty, quoted or not', () => {
     const dir = folder({ '.env.local': 'VITE_TELEGRAM_API_ID=""\nVITE_TELEGRAM_API_HASH=\nVITE_RELAY=""\n' })
-    expect(parts(dir)).toEqual({ telegram: false, voice: false })
+    expect(parts(dir)).toEqual({ telegram: false, voice: false, calendar: false })
   })
 
   it('needs both halves of the app id', () => {
-    expect(parts(folder({ '.env.local': 'VITE_TELEGRAM_API_ID=123\n' }))).toEqual({ telegram: false, voice: false })
-    expect(parts(folder({}))).toEqual({ telegram: false, voice: false })
+    expect(parts(folder({ '.env.local': 'VITE_TELEGRAM_API_ID=123\n' }))).toEqual({ telegram: false, voice: false, calendar: false })
+    expect(parts(folder({}))).toEqual({ telegram: false, voice: false, calendar: false })
   })
 
   it('counts a setting given in the environment, as the build does, and nothing the test run itself was started with', () => {
-    expect(parts(folder({}))).toEqual({ telegram: false, voice: false })
+    expect(parts(folder({}))).toEqual({ telegram: false, voice: false, calendar: false })
     process.env.VITE_RELAY = 'https://relay.example'
-    expect(parts(folder({}))).toEqual({ telegram: false, voice: true })
+    expect(parts(folder({}))).toEqual({ telegram: false, voice: true, calendar: false })
+  })
+
+  it('A8: says Google Calendar is on only when the pack is told its relay has Google’s sign-in set up, and has a relay', () => {
+    const relay = 'VITE_RELAY=https://relay.example\n'
+    expect(parts(folder({ '.env.local': `${relay}VITE_GOOGLE_CALENDAR=on\n` })).calendar).toBe(true)
+    expect(parts(folder({ '.env.local': `${relay}VITE_GOOGLE_CALENDAR=off\n` })).calendar).toBe(false)
+    expect(parts(folder({ '.env.local': `${relay}VITE_GOOGLE_CALENDAR=\n` })).calendar).toBe(false)
+    expect(parts(folder({ '.env.local': 'VITE_GOOGLE_CALENDAR=on\n' })).calendar).toBe(false)
   })
 
   it('follows the production files and their order, as the build does', () => {
@@ -57,6 +65,6 @@ describe('what a pack says it holds, read the way the build reads it', () => {
       '.env': 'VITE_RELAY=https://relay.example\nBASE=123\nVITE_TELEGRAM_API_ID=$BASE\nVITE_TELEGRAM_API_HASH=abc\n',
       '.env.production.local': 'VITE_RELAY=\n',
     })
-    expect(parts(dir)).toEqual({ telegram: true, voice: false })
+    expect(parts(dir)).toEqual({ telegram: true, voice: false, calendar: false })
   })
 })
