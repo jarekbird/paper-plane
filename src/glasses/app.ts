@@ -26,11 +26,13 @@ import {
 import { hasNew, type Inbox } from '../inbox.ts'
 import type { Display } from './display.ts'
 import { instructed } from '../instruction.ts'
-import type { Chat, Message, Messenger, Sponsored, Writer } from '../messenger.ts'
+import type { Diary } from '../agenda.ts'
+import type { Calendar, Chat, Meeting, Message, Messenger, Sponsored, Writer } from '../messenger.ts'
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
 import { troubleWords } from '../trouble.ts'
+import { spanWords, whenIn, whenWords } from '../when.ts'
 
 export interface Hearing {
   transcribe: VoiceOptions['transcribe']
@@ -44,6 +46,14 @@ export interface GlassesParts {
   phrases: Phrases
   hearing?: Hearing
   writer?: Writer
+  diary?: () => Diary | null
+  onDiary?: (told: () => void) => () => void
+  now?: () => number
+}
+
+interface Added {
+  meeting: Meeting
+  calendar: Calendar
 }
 
 export interface GlassesApp {
@@ -55,6 +65,7 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+const MINUTE_MS = 60_000
 // Where a reply can be meant: on typesafe/jev-1.14 on 2026-11-25 every command tried scored 0.68 or more ("go home" the lowest) and no dictated reply reached 0.6 for a command but one harmless scroll (docs/proof/voice/live.md).
 const SURE = 0.6
 const REPLY = 'Reply'
@@ -99,6 +110,12 @@ const WORDS = {
   notSaved: 'Could not save it',
   notSent: 'Not sent. Tap to try again',
   undo: 'Sent. Tap to undo',
+  undoBoth: 'Sent and added. Tap to undo',
+  sentAndAdded: 'Sent and added',
+  notAdded: 'Sent. Could not add it to the calendar',
+  meetingKept: 'Message taken back. The meeting is still in the calendar',
+  tapOrAdd: 'Tap to send. Menu: Send and add',
+  noTime: 'No time to add',
   undone: 'Taken back',
   notUndone: 'Could not take it back',
   nothingToUndo: 'Nothing to undo',
@@ -119,15 +136,16 @@ const line = (chat: Chat | undefined, message: Message) => {
   return message.liked ? `${text} ${LIKED}` : text
 }
 
-const page = (title: string, body: string, foot: string): Box[] => [
+const page = (title: string, body: string, foot: string, above?: string): Box[] => [
   { id: 'title', x: 0, y: 0, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: fitText(oneLine(title), SCREEN_WIDTH), brightness: DIM },
-  { id: 'body', x: 0, y: LINE_HEIGHT, w: SCREEN_WIDTH, h: ROWS * LINE_HEIGHT, text: body },
+  { id: 'body', x: 0, y: LINE_HEIGHT, w: SCREEN_WIDTH, h: (above === undefined ? ROWS : ROWS - 1) * LINE_HEIGHT, text: body },
+  ...(above === undefined ? [] : [{ id: 'above', x: 0, y: SCREEN_HEIGHT - 2 * LINE_HEIGHT, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: above }]),
   { id: 'foot', x: 0, y: SCREEN_HEIGHT - LINE_HEIGHT, w: SCREEN_WIDTH, h: LINE_HEIGHT, text: foot, brightness: DIM },
 ]
 
-function scroller(lines: () => readonly string[], redraw: () => void) {
+function scroller(lines: () => readonly string[], redraw: () => void, rows = ROWS) {
   let top = 0
-  const last = () => Math.max(0, lines().length - ROWS)
+  const last = () => Math.max(0, lines().length - rows)
   const at = () => Math.min(top, last())
   const move = (by: number) => () => {
     top = Math.max(0, Math.min(last(), at() + by))
@@ -140,7 +158,7 @@ function scroller(lines: () => readonly string[], redraw: () => void) {
     },
     shown: () =>
       lines()
-        .slice(at(), at() + ROWS)
+        .slice(at(), at() + rows)
         .join('\n'),
     down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
     up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
@@ -168,9 +186,12 @@ export function startWaiting(life: Lifetime, shown: Display, body: string, retry
 
 export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts): GlassesApp {
   const { inbox, messenger, phrases, hearing, writer } = parts
+  const diary = parts.diary ?? (() => null)
+  const now = parts.now ?? Date.now
   const { glasses, upToDate } = shown
   const unseen = () => (upToDate() ? null : WORDS.loading)
-  const sentIn = new Map<string, (message: Message) => void>()
+  const sentIn = new Map<string, (message: Message, added?: Added | null) => void>()
+  const heardIn = new Map<string, Message>()
   const chatOn = new WeakMap<Screen, { chat: string; covers: boolean }>()
   const choices = new WeakMap<Screen, () => Chat[]>()
   let held: Screen | null = null
@@ -183,7 +204,14 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     const asSaid = showable(given)
     let words = asSaid
     let lines = wrapText(words, SCREEN_WIDTH)
-    const scroll = scroller(() => lines, redraw)
+    const heard = heardIn.get(id)
+    const book = diary()
+    const read = book && heard ? whenIn(heard.text, heard.at) : null
+    const named = read && read.start > now() ? read : null
+    const eventLead = named ? `Calendar: ${spanWords(named.start, named.end, now())}, ` : ''
+    const eventLine = named ? fitText(oneLine(cleanText(`${eventLead}${titleOf(id)}`)), SCREEN_WIDTH) : undefined
+    const event = named && eventLine ? { title: eventLine.slice(eventLead.length), start: named.start, end: named.end } : null
+    const scroll = scroller(() => lines, redraw, event ? ROWS - 1 : ROWS)
     let state: 'ready' | 'writing' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
     let attempt = {}
     let unwritten = spoken && writer !== undefined && instructed(asSaid)
@@ -207,33 +235,55 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
                 : null
     let screen: Lifetime | null = null
 
+    const deliver = async (adding: boolean) => {
+      if (!screen) return
+      const entered = screen
+      state = 'sending'
+      redraw()
+      let sent: Message | null
+      try {
+        sent = await entered.guard(messenger.send(id, words, attempt))
+      } catch (error) {
+        if (error instanceof LifetimeEnded) return
+        state = 'failed'
+        redraw()
+        const why = troubleWords(error, '')
+        if (why) shell.notice(why)
+        return
+      }
+      let added: Meeting | null = null
+      let lost = false
+      if (adding && event && book) {
+        try {
+          added = await entered.guard(book.calendar.add(event, entered.signal))
+        } catch (error) {
+          if (error instanceof LifetimeEnded) return
+          lost = true
+        }
+      }
+      state = 'sent'
+      if (router.current === self) router.back()
+      else redraw()
+      if (sent) sentIn.get(id)?.(sent, added && book ? { meeting: added, calendar: book.calendar } : null)
+      else if (!lost) shell.notice(added ? WORDS.sentAndAdded : WORDS.sent)
+      if (lost) shell.notice(WORDS.notAdded)
+      if (added) void book?.agenda.refresh()
+    }
     const send = action({
       id: 'send',
       say: 'Send',
       hint: 'Sends the reply on screen to this chat',
       risk: 'voice',
       blocked: () => busy() ?? unseen(),
-      run: async () => {
-        if (!screen) return
-        state = 'sending'
-        redraw()
-        let sent: Message | null
-        try {
-          sent = await screen.guard(messenger.send(id, words, attempt))
-        } catch (error) {
-          if (error instanceof LifetimeEnded) return
-          state = 'failed'
-          redraw()
-          const why = troubleWords(error, '')
-          if (why) shell.notice(why)
-          return
-        }
-        state = 'sent'
-        if (router.current === self) router.back()
-        else redraw()
-        if (sent) sentIn.get(id)?.(sent)
-        else shell.notice(WORDS.sent)
-      },
+      run: () => deliver(false),
+    })
+    const sendAndAdd = action({
+      id: 'send-and-add',
+      say: 'Send and add',
+      hint: 'Sends the reply on screen and adds the meeting on screen to the calendar',
+      risk: 'voice',
+      blocked: () => busy() ?? unseen() ?? (offering() ? null : WORDS.noTime),
+      run: () => deliver(true),
     })
     const keep = action({
       id: 'keep',
@@ -303,19 +353,36 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         redraw()
       },
     })
-    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : WORDS.tapToSend)
+    const eventNow = (): string | null => {
+      if (!event || !book || diary()?.calendar !== book.calendar || event.start <= now()) return null
+      const line = `Calendar: ${spanWords(event.start, event.end, now())}, ${event.title}`
+      return fitText(line, SCREEN_WIDTH) === line ? line : null
+    }
+    const offering = () => eventNow() !== null
+    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : offering() ? WORDS.tapOrAdd : WORDS.tapToSend)
 
     const self: Screen = {
       id: `draft:${id}`,
-      actions: () => [send, keep, ...(writer && spoken ? [words === asSaid ? write : revert] : []), scroll.down, scroll.up],
+      actions: () => [
+        send,
+        ...(offering() ? [sendAndAdd] : []),
+        keep,
+        ...(writer && spoken ? [words === asSaid ? write : revert] : []),
+        scroll.down,
+        scroll.up,
+      ],
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
+        if (event) entered.interval(redraw, MINUTE_MS)
         if (!unwritten) return
         unwritten = false
         void writeOut()
       },
-      view: () => boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot()), { on: { tap: send, down: scroll.down, up: scroll.up } }),
+      view: () =>
+        boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot(), eventNow() ?? undefined), {
+          on: { tap: send, down: scroll.down, up: scroll.up },
+        }),
     }
     chatOn.set(self, { chat: id, covers: true })
     return self
@@ -341,7 +408,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let seenClear: string | null = null
     let pending = false
     let sending = false
-    let undo: { message: Message; timer: Timer } | null = null
+    let undo: { message: Message; added: Added | null; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
     const attempts = new Map<string, object>()
@@ -404,6 +471,9 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       pending = false
       messages = loaded
       failed = false
+      const newest = loaded.findLast(message => !message.mine)
+      if (newest) heardIn.set(id, newest)
+      else heardIn.delete(id)
       redraw()
       markRead(entered)
       if (channel && !adAsked) void sponsor(entered)
@@ -438,14 +508,14 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       })
     }
 
-    const sent = (message: Message) => {
+    const sent = (message: Message, added: Added | null = null) => {
       if (!screen) return
       undo?.timer.cancel()
       const timer = screen.timeout(() => {
         undo = null
         redraw()
       }, UNDO_MS)
-      undo = { message, timer }
+      undo = { message, added, timer }
       redraw()
     }
 
@@ -461,13 +531,22 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         pending.timer.cancel()
         undo = null
         redraw()
+        const entered = screen
         try {
-          await screen.guard(messenger.unsend(pending.message))
+          await entered.guard(messenger.unsend(pending.message))
         } catch (error) {
           if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notUndone))
           return
         }
+        if (!pending.added) return shell.notice(WORDS.undone)
+        try {
+          await entered.guard(pending.added.calendar.remove(pending.added.meeting, entered.signal))
+        } catch (error) {
+          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.meetingKept)
+          return
+        }
         shell.notice(WORDS.undone)
+        void diary()?.agenda.refresh()
       },
     })
 
@@ -604,6 +683,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         sentIn.set(id, sent)
         entered.own(() => {
           if (sentIn.get(id) === sent) sentIn.delete(id)
+          heardIn.delete(id)
         })
         entered.own(messenger.onChange(() => void load(entered)))
         entered.own(
@@ -619,10 +699,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       },
       view: () =>
         failed
-          ? boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToRetry), { on: { tap: undo ? takeBack : again } })
+          ? boxes(page(titleOf(id), scroll.shown(), undo ? (undo.added ? WORDS.undoBoth : WORDS.undo) : WORDS.tapToRetry), {
+              on: { tap: undo ? takeBack : again },
+            })
           : channel
             ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
-            : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
+            : boxes(page(titleOf(id), scroll.shown(), undo ? (undo.added ? WORDS.undoBoth : WORDS.undo) : WORDS.tapToReply), {
                 on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
               }),
     }
@@ -714,13 +796,23 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     run: markRead,
   })
 
+  const nextMeeting = (): string | null => {
+    const next = diary()?.agenda.next()
+    if (!next) return null
+    const title = oneLine(cleanText(next.title))
+    const running = next.start <= now()
+    const time = whenWords(next.start, now()).replace(/^Today /, '')
+    if (parts.title) return `${parts.title}, ${running ? 'now' : `next ${time}`} ${title}`
+    return running ? `Now: ${title}` : `Next: ${time} ${title}`
+  }
+
   const router: Router = new Router({
     home: {
       id: 'chats',
       context: () => 'The list of chats',
       view: () =>
         list({
-          title: inbox.problem && inbox.picked().length ? inbox.problem : (parts.title ?? WORDS.title),
+          title: inbox.problem && inbox.picked().length ? inbox.problem : (nextMeeting() ?? parts.title ?? WORDS.title),
           action: open,
           empty: inbox.problem ?? WORDS.noChats,
         }),
@@ -806,6 +898,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     }),
   )
   life.own(inbox.onChange(redraw))
+  if (parts.onDiary) life.own(parts.onDiary(redraw))
   life.own(phrases.onChange(redraw))
 
   return { router, shell }

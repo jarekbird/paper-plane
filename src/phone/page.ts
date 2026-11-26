@@ -3,12 +3,14 @@ import type { Inbox } from '../inbox.ts'
 import type { Phrases } from '../phrases.ts'
 import { folderRows, pickRows, setPicked } from './model.ts'
 import { whatLeaves, type Build } from './privacy.ts'
+import type { Connect } from './calendar.ts'
 import type { SignIn } from './signin.ts'
 
 export interface PhoneParts {
   inbox: Inbox | null
   phrases: Phrases
   signIn: SignIn | null
+  connect?: Connect | null
   note: string
   build: Build
 }
@@ -53,6 +55,49 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
     button.disabled = busy
     rows.listen(button, 'click', press)
     return button
+  }
+
+  const calendar = element('section')
+  let calendarRows = life.child()
+  const drawCalendar = (connect: Connect) => {
+    calendarRows.end()
+    calendarRows = life.child()
+    const rows = calendarRows
+    const { step, busy, link, problem } = connect.view()
+    const parts: HTMLElement[] = [element('h2', 'Google Calendar')]
+    if (problem) {
+      const shown = element('p', problem)
+      shown.className = 'problem'
+      parts.push(shown)
+    }
+    if (step === 'off')
+      parts.push(
+        element('p', 'See your next meeting on the glasses, and add a time someone names in a chat to your calendar.'),
+        plain(rows, 'Connect Google Calendar', busy, () => void connect.begin()),
+      )
+    if (step === 'code' && link) {
+      const open = element('a', 'Open Google sign-in')
+      open.href = link
+      open.target = '_blank'
+      open.rel = 'noreferrer'
+      parts.push(
+        element('p', 'Sign in at Google, in your browser. The page then shows a code of six digits: type it here.'),
+        open,
+        form(rows, field('text', 'Code', 'one-time-code', true), 'Connect', busy, code => void connect.code(code)),
+        plain(rows, 'Cancel', busy, () => connect.cancel()),
+      )
+    }
+    if (step === 'on')
+      parts.push(
+        element('p', 'Connected. Your next meeting is on the glasses.'),
+        plain(rows, 'Disconnect', busy, () => void connect.disconnect()),
+      )
+    calendar.replaceChildren(...parts)
+  }
+  const connect = parts.connect
+  if (connect) {
+    life.own(connect.onChange(() => drawCalendar(connect)))
+    drawCalendar(connect)
   }
 
   const drawAccount = () => {
@@ -103,7 +148,7 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
   if (signIn) life.own(signIn.onChange(drawAccount))
   drawAccount()
   if (!parts.inbox) {
-    root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), privacy)
+    root.replaceChildren(element('h1', 'Paper Plane'), account, ...(connect ? [calendar] : []), element('p', note), privacy)
     return
   }
   const inbox = parts.inbox
@@ -183,7 +228,7 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
     )
   }
 
-  root.replaceChildren(element('h1', 'Paper Plane'), account, element('p', note), chats, answers, privacy)
+  root.replaceChildren(element('h1', 'Paper Plane'), account, ...(connect ? [calendar] : []), element('p', note), chats, answers, privacy)
   life.own(inbox.onChange(drawChats))
   life.own(phrases.onChange(drawAnswers))
   drawChats()

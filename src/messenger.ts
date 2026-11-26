@@ -87,3 +87,24 @@ export interface Account {
 export interface Writer {
   write(words: string, signal: AbortSignal): Promise<string>
 }
+
+export interface Meeting {
+  id: string
+  title: string
+  start: number
+  end: number
+}
+
+export interface Calendar {
+  next(from: number, signal: AbortSignal): Promise<Meeting | null>
+  add(meeting: Omit<Meeting, 'id'>, signal: AbortSignal): Promise<Meeting>
+  remove(meeting: Meeting, signal: AbortSignal): Promise<void>
+}
+
+export interface CalendarAccount {
+  known(): Promise<boolean>
+  begin(): Promise<string>
+  finish(code: string, signal: AbortSignal): Promise<boolean>
+  signOut(): Promise<'ended' | 'here'>
+  onChange(told: () => void): () => void
+}

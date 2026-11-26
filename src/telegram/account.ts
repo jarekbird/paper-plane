@@ -1,6 +1,7 @@
 import { LifetimeEnded, type Lifetime } from 'earshot'
 import { tl } from '@mtcute/core'
 import { SignInError, type Account, type SignInProblem, type Who } from '../messenger.ts'
+import { turns } from '../turns.ts'
 import type { SignedIn } from './messenger.ts'
 import { ANSWER_MS, answerWithin, signedOut } from './trouble.ts'
 
@@ -50,19 +51,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   let era = 0
   let inside = false
   let stale = false
-  let turn: Promise<void> = Promise.resolve()
-
-  const inTurn = async <T>(work: () => Promise<T>): Promise<T> => {
-    const before = turn
-    let free = () => {}
-    turn = new Promise<void>(resolve => (free = resolve))
-    try {
-      await life.guard(before)
-      return await life.guard(work())
-    } finally {
-      free()
-    }
-  }
+  const inTurn = turns(life)
 
   const write = (session: string | null): Promise<void> =>
     inTurn(async () => {

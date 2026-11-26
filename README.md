@@ -4,8 +4,8 @@ Telegram on [Even Realities G2](https://www.evenrealities.com) glasses: the chat
 voice. Hold the touchpad, say the reply, read it back on the glasses, tap to send.
 
 Built for the **Heads Up** hackathon (Even Realities × TVM Ventures × Daos Hub), 23–29 November 2026.
-Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (OpenRouter, to turn what you say into an
-action or a message; Google Calendar is being built), in one flow.
+Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (Google Calendar, and OpenRouter to turn what
+you say into an action or a message), in one flow.
 
 ## What it does
 
@@ -21,6 +21,8 @@ action or a message; Google Calendar is being built), in one flow.
 | A thumbs-up, or a message saved      | Menu > Like, or Save (to Saved Messages); or say "like that"       |
 | A channel's posts                    | Tap the channel: its posts, then Telegram's sponsored message, as Telegram's terms ask |
 | Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
+| Your next meeting                    | The top line of the list, once you connect Google Calendar on the phone: "Next: 11 AM Design review" |
+| An answer and a calendar entry       | Someone writes "I can do 12:30". Say your reply; the screen also shows "Calendar: Today 12:30 to 1:30 PM, Anna". Tap sends the reply; "Send and add" (menu or voice) sends it and adds the meeting; one undo takes back both |
 | What is wrong, when something is     | "Cannot reach Telegram", "Telegram says wait 2 minutes", "Signed out of Telegram": said on the glasses, and a reply you wrote stays until it can go |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
@@ -43,7 +45,7 @@ This is a build in progress, during the hackathon week.
 - **Tried on real Telegram, once (26 November):** signing in with number and code from the app in the simulator,
   the list of chats (61 came back), and signing out. Sending, folders, mentions and channels have not been tried
   there yet.
-- **Not built yet:** Google Calendar. Until it is, the second track rests on the voice and writing models.
+- **Google Calendar:** built and tried on the sample calendar. Never run against Google yet.
 - **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
@@ -91,6 +93,18 @@ Without a relay, a hold hears nothing outside the simulator's `#say=`. The relay
 npx wrangler deploy --config worker/wrangler.toml
 npx wrangler secret put OPENROUTER_KEY --config worker/wrangler.toml
 ```
+
+For Google Calendar the same Worker takes the sign-in from Google: make an OAuth client (type "Web application")
+in a Google Cloud project with the Calendar API on, give it the redirect address
+`https://<your worker>/google/callback`, put its client id in `worker/wrangler.toml` as the variable
+`GOOGLE_CLIENT_ID`, and its secret on the Worker:
+
+```sh
+npx wrangler secret put GOOGLE_CLIENT_SECRET --config worker/wrangler.toml
+```
+
+Without them the app shows no calendar but the sample one. To try the connect step without Google, open
+`http://127.0.0.1:5183/#account=sample`, choose "Connect Google Calendar" and type the code `123456`.
 
 Then put its address in `.env.local` as `VITE_RELAY=https://…` and in the network whitelist of `app.json`. What it
 is sent: the sound of a hold, and the words heard in it with the names of the app's own actions. Never a chat, a

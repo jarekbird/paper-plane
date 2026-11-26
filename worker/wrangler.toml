@@ -5,3 +5,11 @@ workers_dev = true
 
 [vars]
 UPSTREAM = "https://openrouter.ai"
+
+[[durable_objects.bindings]]
+name = "PAIRS"
+class_name = "PairStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PairStore"]

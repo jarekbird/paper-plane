@@ -28,7 +28,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
 | 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built; 48 of 50; no mute |
 | 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
-| 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         |                          |
+| 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         | built, on samples; never run on Google |
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
 | 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    | built, on samples        |

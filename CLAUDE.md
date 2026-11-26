@@ -26,9 +26,11 @@ which rule has which check. A rule with no check yet says so there.
 ## Security rules
 
 - **S1** Telegram talks to the phone only: the session, chats and messages go between `src/telegram` and Telegram's
-  servers, never through a server of ours. Two things leave for the Worker, and nothing else: the sound of a hold and
-  the words heard in it. No message text and no name of a chat or a person read from Telegram goes to the Worker or
-  to a model; a chat said by name is matched on the phone.
+  servers, never through a server of ours. Two things leave for the Worker when the user speaks, and nothing else:
+  the sound of a hold and the words heard in it. No message text and no name of a chat or a person read from
+  Telegram goes to the Worker or to a model; a chat said by name is matched on the phone. A Google sign-in passes
+  through the Worker when it is made and when it is renewed (S7); the calendar itself goes only between
+  `src/google` and Google.
 - **S2** The network whitelist in `app.json` is exactly Telegram's web sockets, the Worker and Google's APIs. The
   bundle names no other address it can connect to. What the Telegram library only reads or prints is listed, each
   with its reason, in `scripts/store-check.mjs`.

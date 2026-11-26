@@ -45,4 +45,6 @@ upload, only on Jarek's word.
 `worker/` is Earshot's relay as the Cloudflare Worker `paper-plane-relay`. CI never deploys it and never reaches
 it. It is deployed by hand from a clean checkout of `origin/main`: `npx wrangler deploy --config
 worker/wrangler.toml`, with the Cloudflare token in the environment; the OpenRouter key is its secret
-`OPENROUTER_KEY` and is nowhere else (S3).
+`OPENROUTER_KEY` and is nowhere else (S3). Google's client secret is its secret `GOOGLE_CLIENT_SECRET`, likewise;
+the client id, which is no secret, is the variable `GOOGLE_CLIENT_ID` in `worker/wrangler.toml`. The Worker has one
+Durable Object class, `PairStore`, which keeps a Google sign-in for five minutes at most (S7).

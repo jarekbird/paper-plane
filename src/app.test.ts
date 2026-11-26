@@ -3,6 +3,8 @@ import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startApp } from './app.ts'
 import { DEMO_CODE, DEMO_WHO, demoAccount, type DemoSession } from './demo/account.ts'
+import { DEMO_PAIR_CODE, demoCalendarAccount } from './demo/calendar-account.ts'
+import { demoCalendar } from './demo/calendar.ts'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
 import { display } from './glasses/display.ts'
 import type { Account, Who } from './messenger.ts'
@@ -14,6 +16,7 @@ const NO_PICKS = ['Paper Plane', 'Pick your chats on the phone']
 const CONNECTING = ['Paper Plane', 'Connecting to Telegram…']
 
 interface Options {
+  calendar?: 'sample only' | 'not connected' | 'connected'
   signedIn?: boolean
   telegram?: boolean
   store?: Store
@@ -30,12 +33,21 @@ async function world(options: Options = {}) {
   const own = demoMessenger(() => 1_700_000_000_000)
   const account = demoAccount(session, false, options.who ?? DEMO_WHO)
   const phones: string[] = []
+  const google = { connected: options.calendar === 'connected' }
+  const ownCalendar = demoCalendar()
+  const calendar = options.calendar
+    ? {
+        sample: demoCalendar(),
+        ...(options.calendar === 'sample only' ? {} : { own: { account: demoCalendarAccount(google), calendar: () => ownCalendar } }),
+      }
+    : undefined
   const app = await startApp({
     life,
     display: display(life, fake.bridge),
     store,
     sample: { messenger: sample, picks: DEMO_PICKS },
     ...(options.telegram === false ? {} : { telegram: { account: options.wrap ? options.wrap(account) : account, messenger: own } }),
+    ...(calendar ? { calendar } : {}),
     phone: (_, parts) => void phones.push(parts.note),
   })
   await settle()
@@ -285,5 +297,94 @@ describe('a sign-in ended from another device', () => {
     made.fake.tap()
     await settle()
     expect(made.own.sent()).toEqual([])
+  })
+})
+
+describe('the calendar', () => {
+  const connectGoogle = async (app: Awaited<ReturnType<typeof world>>['app']) => {
+    await app.connect!.begin()
+    await app.connect!.code(DEMO_PAIR_CODE)
+    await settle()
+  }
+
+  it('is the sample calendar with the sample chats, so the next meeting shows without any sign-in', async () => {
+    const { fake } = await world({ calendar: 'sample only' })
+    expect(fake.lines()[0]).toMatch(/^Sample chats, next .* Design review$/)
+  })
+
+  it('A8: is not on the glasses with the user’s own chats until Google is connected', async () => {
+    const made = await world({ signedIn: true, calendar: 'not connected' })
+    expect(made.app.scope()).toBe('telegram')
+    expect(made.fake.lines()).toEqual(NO_PICKS)
+  })
+
+  it('comes onto the glasses when the user connects Google on the phone, and goes when they disconnect', async () => {
+    const made = await world({ signedIn: true, calendar: 'not connected' })
+    await connectGoogle(made.app)
+    expect(made.fake.lines()[0]).toMatch(/^Next: .* Design review$/)
+    await made.app.connect!.disconnect()
+    await settle()
+    expect(made.fake.lines()).toEqual(NO_PICKS)
+  })
+
+  it('still says the chats are samples when Google is connected and Telegram is not', async () => {
+    const made = await world({ calendar: 'connected' })
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.lines()[0]).toMatch(/^Sample chats, next .* Design review$/)
+    expect(made.app.connect!.view().step).toBe('on')
+  })
+
+  it('leaves the user on the screen they are on when Google is connected or disconnected: no reply in the making is lost', async () => {
+    const made = await world({ calendar: 'connected' })
+    made.fake.tap()
+    await settle()
+    made.fake.tap()
+    await settle()
+    expect(made.fake.lines()[0]).toBe('To Anna')
+    await made.app.connect!.disconnect()
+    await settle()
+    expect(made.fake.lines()[0]).toBe('To Anna')
+    await connectGoogle(made.app)
+    expect(made.fake.lines()[0]).toBe('To Anna')
+  })
+
+  it('A5: takes a calendar anew whenever the Google sign-in changes, also when one account replaces another at once', async () => {
+    const taken: number[] = []
+    const google = { connected: true }
+    const account = demoCalendarAccount(google)
+    const life = new Lifetime()
+    const fake = fakeBridge()
+    await startApp({
+      life,
+      display: display(life, fake.bridge),
+      store: createStore([memoryPlace()]),
+      sample: { messenger: demoMessenger(() => 1_700_000_000_000), picks: DEMO_PICKS },
+      calendar: {
+        sample: demoCalendar(),
+        own: {
+          account,
+          calendar: () => {
+            taken.push(taken.length)
+            return demoCalendar()
+          },
+        },
+      },
+    })
+    await settle()
+    expect(taken).toHaveLength(1)
+    void account.signOut()
+    await account.begin()
+    await account.finish(DEMO_PAIR_CODE, new AbortController().signal)
+    await settle()
+    expect(taken.length).toBeGreaterThan(1)
+  })
+
+  it('keeps the user where their chats are when Google is connected: the same account, its picks kept', async () => {
+    const made = await world({ signedIn: true, calendar: 'not connected' })
+    await made.app.inbox()!.pick(['anna'])
+    await settle()
+    await connectGoogle(made.app)
+    expect(made.app.scope()).toBe('telegram')
+    expect(made.fake.lines().slice(1)).toEqual(['> Anna (2)'])
   })
 })

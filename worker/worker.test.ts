@@ -57,7 +57,7 @@ describe('the Worker', () => {
     expect(calls).toEqual([])
   })
 
-  it('S7, S4: stores nothing and logs nothing: no storage or log is set up, and its code names none', () => {
+  it('S7, S4: logs nothing, and has one place to keep anything: the Google sign-in on its way to the phone (worker/pairs.test.ts)', () => {
     const settings = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8')
       .split('\n')
       .filter(line => line.trim())
@@ -68,8 +68,14 @@ describe('the Worker', () => {
       'workers_dev = true',
       '[vars]',
       'UPSTREAM = "https://openrouter.ai"',
+      '[[durable_objects.bindings]]',
+      'name = "PAIRS"',
+      'class_name = "PairStore"',
+      '[[migrations]]',
+      'tag = "v1"',
+      'new_sqlite_classes = ["PairStore"]',
     ])
     const code = readFileSync(new URL('./worker.ts', import.meta.url), 'utf8')
-    expect(code).not.toMatch(/console|caches|\.put\(|\.get\(|KV|D1|R2|Durable|waitUntil/)
+    expect(code).not.toMatch(/console|caches|\.put\(|\.get\(|KV|D1|R2|waitUntil/)
   })
 })
