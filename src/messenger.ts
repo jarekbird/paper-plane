@@ -34,6 +34,7 @@ export interface Sponsored {
 
 export interface Messenger {
   chats(): Promise<Chat[]>
+  folders(): Promise<Folder[]>
   history(chat: string, limit: number): Promise<Message[]>
   send(chat: string, text: string, attempt?: object): Promise<Message | null>
   read(chat: string): Promise<void>

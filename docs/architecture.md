@@ -65,6 +65,10 @@ one write after the other, and a removal is done only when every copy has answer
 land on a newer sign-in. The words for both are in
 `src/trouble.ts` and `src/phone/signin.ts`; the sample account stages each (`src/demo`, A6).
 
+What reaches the glasses is what the user picked on the phone: single chats, or a whole Telegram folder. A service
+lists the account's folders (`Messenger.folders`) and says for each chat which of them it is in; `src/inbox.ts`
+keeps a folder pick by the folder's id and name, and forgets it when the account no longer lists that folder.
+
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
 `Shell` reads the touchpad, runs the action a tap, a swipe, the menu or the voice chose, and its `Glasses` alone
 talks to the Even SDK bridge. Timers, listeners, sockets and requests belong to an Earshot `Lifetime` (A4), and code

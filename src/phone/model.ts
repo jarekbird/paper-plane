@@ -21,7 +21,7 @@ const KINDS: Record<ChatKind, string> = { person: 'Person', group: 'Group', chan
 export function pickRows(inbox: Inbox): PickRow[] {
   const picks = inbox.picks()
   return inbox.all().map(chat => {
-    const through = chat.folders.find(folder => picks.includes(folderPick(folder.id)))?.title ?? null
+    const through = chat.folders.find(folder => picks.includes(folderPick(folder)))?.title ?? null
     return { id: chat.id, title: chat.title, kind: KINDS[chat.kind], picked: through !== null || picks.includes(chat.id), through }
   })
 }
@@ -29,10 +29,10 @@ export function pickRows(inbox: Inbox): PickRow[] {
 export function folderRows(inbox: Inbox): FolderRow[] {
   const picks = inbox.picks()
   return inbox.folders().map(({ folder, chats }) => ({
-    pick: folderPick(folder.id),
+    pick: folderPick(folder),
     title: folder.title,
-    chats: chats === 1 ? '1 chat' : `${chats} chats`,
-    picked: picks.includes(folderPick(folder.id)),
+    chats: chats === 0 ? 'No chats' : chats === 1 ? '1 chat' : `${chats} chats`,
+    picked: picks.includes(folderPick(folder)),
   }))
 }
 

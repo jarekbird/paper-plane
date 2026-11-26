@@ -1,20 +1,23 @@
 import type { Lifetime } from 'earshot'
-import { Dialog, type tl } from '@mtcute/core'
+import type { Dialog, tl } from '@mtcute/core'
 import { BaseTelegramClient, TelegramClient } from '@mtcute/core/client.js'
 import { randomLong } from '@mtcute/core/utils.js'
 import type { Account, Messenger } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
-import { messengerOver, type ClientLike, type LinkState } from './messenger.ts'
+import { foldersOf } from './folders.ts'
+import { messengerOver, type ClientLike, type LinkState, type RawLike } from './messenger.ts'
 import { clientOptions, type TelegramApp } from './options.ts'
 import { ANSWER_MS, answerWithin } from './trouble.ts'
 
 type Heard = (update: { name: string }) => void
 type Linked = (state: LinkState) => void
+type Raw = (told: RawLike) => void
 
 export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace): { account: Account; messenger: Messenger } {
   const make = () => new TelegramClient({ client: new BaseTelegramClient(clientOptions(app)) })
   const heard = new Set<Heard>()
   const linked = new Set<Linked>()
+  const raw = new Set<Raw>()
   let current = make()
 
   const live: AuthClientLike & ClientLike<tl.Long, Dialog> = {
@@ -30,17 +33,14 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
       const old = current
       for (const listener of heard) old.onUpdate.remove(listener)
       for (const listener of linked) old.onConnectionState.remove(listener)
+      for (const listener of raw) old.onRawUpdate.remove(listener)
       current = make()
       for (const listener of heard) current.onUpdate.add(listener)
       for (const listener of linked) current.onConnectionState.add(listener)
+      for (const listener of raw) current.onRawUpdate.add(listener)
       await old.destroy()
     },
-    folders: async () => {
-      const { filters } = await current.getFolders()
-      return filters.flatMap(filter =>
-        filter._ === 'dialogFilterDefault' ? [] : [{ id: filter.id, title: filter.title.text, has: Dialog.filterFolder(filter) }],
-      )
-    },
+    folders: async () => foldersOf((await current.getFolders()).filters),
     iterDialogs: params => current.iterDialogs(params),
     getHistory: (chat, params) => current.getHistory(chat, params),
     randomId: () => randomLong(),
@@ -66,6 +66,16 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
       remove: listener => {
         heard.delete(listener)
         current.onUpdate.remove(listener)
+      },
+    },
+    onRawUpdate: {
+      add: listener => {
+        raw.add(listener)
+        current.onRawUpdate.add(listener)
+      },
+      remove: listener => {
+        raw.delete(listener)
+        current.onRawUpdate.remove(listener)
       },
     },
     onConnectionState: {

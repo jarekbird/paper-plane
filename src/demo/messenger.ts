@@ -94,6 +94,7 @@ export interface DemoMessenger extends Messenger {
   loseAnswer(): void
   readElsewhere(chat: string): void
   file(chat: string, folders: readonly Folder[]): void
+  unfile(folder: string): void
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
@@ -105,6 +106,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const drafts = new Map<string, string>()
   const unanswered = new WeakSet<object>()
   let trouble: Trouble | null = null
+  let shelf: Folder[] = [FRIENDS, WORK]
   let losing = false
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
@@ -150,6 +152,10 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
         folders: chat.folders,
         last: chat.messages.at(-1) ?? null,
       }))
+    },
+    folders: async () => {
+      reach()
+      return [...shelf]
     },
     history: async (id, limit) => {
       reach()
@@ -244,6 +250,12 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     drafts: () => drafts,
     file: (id, folders) => {
       find(id).folders = [...folders]
+      for (const folder of folders) if (!shelf.some(known => known.id === folder.id)) shelf.push(folder)
+      tell()
+    },
+    unfile: id => {
+      shelf = shelf.filter(folder => folder.id !== id)
+      for (const chat of chats) chat.folders = chat.folders.filter(folder => folder.id !== id)
       tell()
     },
     readElsewhere: id => {

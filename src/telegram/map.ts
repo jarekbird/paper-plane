@@ -68,6 +68,10 @@ export function toMessage(message: MessageLike): Message {
   }
 }
 
+const FOLDER_CHANGES = new Set(['updateDialogFilter', 'updateDialogFilterOrder', 'updateDialogFilters'])
+
+export const foldersChanged = (told: { update: { _: string } }): boolean => FOLDER_CHANGES.has(told.update._)
+
 export interface FolderLike<D> {
   id: number
   title: string

@@ -7,6 +7,7 @@ export interface ContractWorld {
   unreadChat: string
   mentionedChat: string
   folder: { title: string; chats: string[] }
+  emptyFolder(): Promise<string>
   channel: string
   saved(): Promise<string[]>
   sponsoredSeen(): Promise<number>
@@ -69,6 +70,18 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       const ids = new Set(inFolder.flatMap(chat => chat.folders.filter(one => one.title === folder.title).map(one => one.id)))
       expect(ids.size).toBe(1)
       expect([...ids][0].length).toBeGreaterThan(0)
+    })
+
+    it('lists every folder of the account, also one with no chat in it, and files chats only under folders it lists', async () => {
+      const { messenger, folder, emptyFolder } = await make()
+      const empty = await emptyFolder()
+      const listed = await messenger.folders()
+      const keys = listed.map(one => `${one.id}:${one.title}`)
+      expect(listed.map(one => one.title)).toEqual(expect.arrayContaining([folder.title, empty]))
+      expect(new Set(listed.map(one => one.id)).size).toBe(listed.length)
+      const chats = await messenger.chats()
+      for (const chat of chats) for (const one of chat.folders) expect(keys).toContain(`${one.id}:${one.title}`)
+      expect(chats.some(chat => chat.folders.some(one => one.title === empty))).toBe(false)
     })
 
     it('says which chat has new messages that mention the user, until that chat is marked read', async () => {

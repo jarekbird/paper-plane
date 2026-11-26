@@ -10,6 +10,11 @@ messengerContract('the sample account', async () => {
     unreadChat: 'anna',
     mentionedChat: 'launch',
     folder: { title: 'Work', chats: ['launch', 'news'] },
+    emptyFolder: async () => {
+      messenger.file('anna', [])
+      messenger.file('sam', [])
+      return 'Friends'
+    },
     channel: 'news',
     saved: async () => messenger.saved().map(message => message.text),
     sponsoredSeen: async () => messenger.seenSponsored().length,

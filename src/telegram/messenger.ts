@@ -1,6 +1,16 @@
 import { TroubleError, type Chat, type Messenger } from '../messenger.ts'
 import { sentBefore, signedOut, troubleOf, type Within } from './trouble.ts'
-import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type FolderLike, type MessageLike, type SponsoredLike } from './map.ts'
+import {
+  foldersChanged,
+  LIKE,
+  sponsoredId,
+  toChat,
+  toMessage,
+  type DialogLike,
+  type FolderLike,
+  type MessageLike,
+  type SponsoredLike,
+} from './map.ts'
 
 export interface ClientLike<Id, D extends DialogLike = DialogLike> {
   folders(): Promise<FolderLike<D>[]>
@@ -24,6 +34,14 @@ export interface ClientLike<Id, D extends DialogLike = DialogLike> {
     add(listener: (state: LinkState) => void): void
     remove(listener: (state: LinkState) => void): void
   }
+  onRawUpdate: {
+    add(listener: (told: RawLike) => void): void
+    remove(listener: (told: RawLike) => void): void
+  }
+}
+
+export interface RawLike {
+  update: { _: string }
 }
 
 export type LinkState = 'offline' | 'connecting' | 'updating' | 'connected'
@@ -65,8 +83,12 @@ export function messengerOver<Id, D extends DialogLike = DialogLike>(
     downSince = up ? null : now()
     changed()
   }
+  const refiled = (told: RawLike) => {
+    if (foldersChanged(told)) changed()
+  }
   client.onUpdate.add(heard)
   client.onConnectionState.add(linked)
+  client.onRawUpdate.add(refiled)
 
   const ask = async <T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     const era = session.era()
@@ -91,6 +113,11 @@ export function messengerOver<Id, D extends DialogLike = DialogLike>(
     close: () => {
       client.onUpdate.remove(heard)
       client.onConnectionState.remove(linked)
+      client.onRawUpdate.remove(refiled)
+    },
+    folders: async () => {
+      const folders = await ask(() => client.folders())
+      return folders.map(folder => ({ id: String(folder.id), title: folder.title }))
     },
     chats: () =>
       ask(async signal => {

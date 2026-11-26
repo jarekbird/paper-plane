@@ -33,6 +33,7 @@ function fakeClient() {
   }
   const listeners = new Set<(update: { name: string }) => void>()
   const links = new Set<(state: LinkState) => void>()
+  const raws = new Set<(told: { update: { _: string } }) => void>()
   const asked: string[] = []
   const ended: number[] = []
   const used = new Set<number>()
@@ -119,6 +120,7 @@ function fakeClient() {
     viewSponsored: async randomId => void viewed.push(Array.from(randomId).join(',')),
     onUpdate: { add: listener => void listeners.add(listener), remove: listener => void listeners.delete(listener) },
     onConnectionState: { add: listener => void links.add(listener), remove: listener => void links.delete(listener) },
+    onRawUpdate: { add: listener => void raws.add(listener), remove: listener => void raws.delete(listener) },
   }
   const answering = <A extends unknown[], R>(name: string, call: (...args: A) => Promise<R>) =>
     (async (...args: A) => {
@@ -165,7 +167,8 @@ function fakeClient() {
     loseAnswer: () => void (losing = true),
     later: (ms: number) => void (since += ms),
     signedInAgain: () => void era++,
-    listening: () => listeners.size + links.size,
+    listening: () => listeners.size + links.size + raws.size,
+    raw: (name: string) => raws.forEach(listener => listener({ update: { _: name } })),
     emit: (name: string) => listeners.forEach(listener => listener({ name })),
     link: (state: LinkState) => links.forEach(listener => listener(state)),
   }
@@ -180,6 +183,7 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
     unreadChat: '-1001234',
     mentionedChat: '-1001234',
     folder: { title: 'Groups', chats: ['-1001234', '-1005678'] },
+    emptyFolder: async () => 'Nobody',
     channel: '-1005678',
     saved: async () => fake.forwarded,
     sponsoredSeen: async () => fake.viewed.length,
@@ -210,6 +214,15 @@ describe('the Telegram adapter', () => {
     messengerOver(fake.client, fake.asking).onChange(() => told++)
     for (const name of ['new_message', 'edit_message', 'delete_message', 'history_read', 'user_typing', 'user_status']) fake.emit(name)
     expect(told).toBe(4)
+  })
+
+  it('tells listeners when the user changes a folder in Telegram, adds one, removes one or reorders them, and for no other raw update', () => {
+    const fake = fakeClient()
+    let told = 0
+    messengerOver(fake.client, fake.asking).onChange(() => told++)
+    for (const name of ['updateDialogFilter', 'updateDialogFilterOrder', 'updateDialogFilters', 'updateUserTyping', 'updateConfig'])
+      fake.raw(name)
+    expect(told).toBe(3)
   })
 
   it('leaves a service notice such as "Cy joined" out of a chat’s history', async () => {

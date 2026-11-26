@@ -102,4 +102,58 @@ describe('picking a whole folder on the phone', () => {
         .sort(),
     ).toEqual(['Anna', 'Sam'])
   })
+
+  it('lists a folder that has no chat in it, so a picked one can always be unpicked', async () => {
+    const { inbox, messenger } = await world()
+    const work = folderRows(inbox).find(row => row.title === 'Work')!
+    await setPicked(inbox, work.pick, true)
+    messenger.file('launch', [])
+    messenger.file('news', [])
+    await inbox.refresh()
+    expect(folderRows(inbox).map(row => [row.title, row.chats, row.picked])).toEqual([
+      ['Friends', '2 chats', false],
+      ['Work', 'No chats', true],
+    ])
+    await setPicked(inbox, work.pick, false)
+    expect(folderRows(inbox).find(row => row.title === 'Work')?.picked).toBe(false)
+  })
+
+  it('S1: forgets the pick of a folder the user removed in Telegram, so a new folder that gets its id brings no chat onto the glasses', async () => {
+    const { inbox, store, messenger } = await world()
+    await setPicked(inbox, folderRows(inbox).find(row => row.title === 'Work')!.pick, true)
+    messenger.unfile('work')
+    await inbox.refresh()
+    expect(inbox.picks()).toEqual([])
+    messenger.file('sam', [{ id: 'work', title: 'Private' }])
+    await inbox.refresh()
+    expect(inbox.picked()).toEqual([])
+    const next = new Inbox(new Lifetime(), messenger, store)
+    await next.start()
+    expect(next.picked()).toEqual([])
+  })
+
+  it('S1: does not take a folder that got a removed folder’s id while the app was closed for the one that was picked', async () => {
+    const { inbox, store, messenger } = await world()
+    await setPicked(inbox, folderRows(inbox).find(row => row.title === 'Work')!.pick, true)
+    messenger.unfile('work')
+    messenger.file('sam', [{ id: 'work', title: 'Private' }])
+    const next = new Inbox(new Lifetime(), messenger, store)
+    await next.start()
+    expect(next.picked()).toEqual([])
+    expect(folderRows(next).map(row => [row.title, row.picked])).toEqual([
+      ['Friends', false],
+      ['Private', false],
+    ])
+  })
+
+  it('keeps a picked folder while Telegram cannot be asked which folders there are', async () => {
+    const { inbox, messenger } = await world()
+    const work = folderRows(inbox).find(row => row.title === 'Work')!
+    await setPicked(inbox, work.pick, true)
+    messenger.trouble({ kind: 'unreachable' })
+    await inbox.refresh()
+    messenger.trouble(null)
+    await inbox.refresh()
+    expect(inbox.picks()).toEqual([work.pick])
+  })
 })
