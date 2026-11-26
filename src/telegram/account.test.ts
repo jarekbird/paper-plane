@@ -552,27 +552,37 @@ describe('the Telegram account', () => {
     expect(made.saved()).toMatch(/^session-/)
   })
 
-  it('A5: drops the connection of the sign-in that ended, at once, and never the one of a sign-in made while it was being forgotten', async () => {
-    const made = world(false)
-    await made.account.askCode(PHONE, live())
-    await made.account.giveCode(CODE, live())
-    const save = made.place.save
-    let forgot = () => {}
-    made.place.save = session => (session === null ? new Promise<void>(resolve => (forgot = resolve)) : save(session))
-    made.account.ended(made.account.era())
-    await turn()
-    expect(made.first.drops).toBe(1)
-    made.place.save = save
-    await made.account.askCode(PHONE, live())
-    await made.account.giveCode(CODE, live())
-    let told = 0
-    made.account.onEnded(() => told++)
-    forgot()
-    await turn()
-    expect(made.first.drops).toBe(1)
-    expect(told).toBe(0)
-    expect(await made.account.known()).toBe(true)
-  })
+  it.each(['succeeds', 'fails'] as const)(
+    'A5: keeps a sign-in made while an ended one was still being forgotten, with its own connection, when that forgetting %s late',
+    async outcome => {
+      const made = world(false)
+      await made.account.askCode(PHONE, live())
+      await made.account.giveCode(CODE, live())
+      const save = made.place.save
+      let settle = () => {}
+      made.place.save = () =>
+        new Promise<void>((resolve, reject) => {
+          settle = outcome === 'succeeds' ? () => void save(null).then(resolve) : () => reject(new Error('the store is full'))
+        })
+      made.account.ended(made.account.era())
+      await turn()
+      expect(made.first.drops).toBe(1)
+      made.place.save = save
+      await made.account.signOut()
+      await made.account.askCode(PHONE, live())
+      const entering = made.account.giveCode(CODE, live())
+      await turn()
+      let told = 0
+      made.account.onEnded(() => told++)
+      settle()
+      expect(await entering).toEqual({ id: '4242', name: NAME })
+      await turn()
+      expect(made.first.drops).toBe(1)
+      expect(told).toBe(0)
+      expect(await made.account.known()).toBe(true)
+      expect(made.saved()).toMatch(/^session-/)
+    },
+  )
 
   it('A4: leaves no failure unheard when the app ends while an ended sign-in is still being forgotten and its connection dropped', async () => {
     const made = world(false)

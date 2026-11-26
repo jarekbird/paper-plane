@@ -50,10 +50,19 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   let era = 0
   let inside = false
   let stale = false
+  let forgetting: Promise<boolean> | null = null
 
-  const forgotten = async (): Promise<boolean> => {
-    if (stale) stale = !(await life.guard(done(() => place.save(null))))
-    return !stale
+  const remove = async (): Promise<boolean> => {
+    const removed = await life.guard(done(() => place.save(null)))
+    forgetting = null
+    stale = !removed
+    return removed
+  }
+
+  const forgotten = (): Promise<boolean> => {
+    if (!stale) return Promise.resolve(true)
+    forgetting ??= remove()
+    return forgetting
   }
 
   const enter = (user: UserLike): Who => {
@@ -99,6 +108,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
       if (!signal.aborted) {
         const session = await life.guard(client.exportSession())
         if (!signal.aborted) {
+          await life.guard(forgotten())
           await life.guard(place.save(session))
           stored = true
           stale = false
