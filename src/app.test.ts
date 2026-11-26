@@ -34,10 +34,11 @@ async function world(options: Options = {}) {
   const account = demoAccount(session, false, options.who ?? DEMO_WHO)
   const phones: string[] = []
   const google = { connected: options.calendar === 'connected' }
+  const ownCalendar = demoCalendar()
   const calendar = options.calendar
     ? {
         sample: demoCalendar(),
-        ...(options.calendar === 'sample only' ? {} : { own: { account: demoCalendarAccount(google), calendar: demoCalendar() } }),
+        ...(options.calendar === 'sample only' ? {} : { own: { account: demoCalendarAccount(google), calendar: () => ownCalendar } }),
       }
     : undefined
   const app = await startApp({
@@ -345,6 +346,37 @@ describe('the calendar', () => {
     expect(made.fake.lines()[0]).toBe('To Anna')
     await connectGoogle(made.app)
     expect(made.fake.lines()[0]).toBe('To Anna')
+  })
+
+  it('A5: takes a calendar anew whenever the Google sign-in changes, also when one account replaces another at once', async () => {
+    const taken: number[] = []
+    const google = { connected: true }
+    const account = demoCalendarAccount(google)
+    const life = new Lifetime()
+    const fake = fakeBridge()
+    await startApp({
+      life,
+      display: display(life, fake.bridge),
+      store: createStore([memoryPlace()]),
+      sample: { messenger: demoMessenger(() => 1_700_000_000_000), picks: DEMO_PICKS },
+      calendar: {
+        sample: demoCalendar(),
+        own: {
+          account,
+          calendar: () => {
+            taken.push(taken.length)
+            return demoCalendar()
+          },
+        },
+      },
+    })
+    await settle()
+    expect(taken).toHaveLength(1)
+    void account.signOut()
+    await account.begin()
+    await account.finish(DEMO_PAIR_CODE, new AbortController().signal)
+    await settle()
+    expect(taken.length).toBeGreaterThan(1)
   })
 
   it('keeps the user where their chats are when Google is connected: the same account, its picks kept', async () => {

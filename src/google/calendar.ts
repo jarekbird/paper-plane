@@ -22,12 +22,13 @@ function meetingOf(event: EventLike): Meeting | null {
 }
 
 export function calendarOver(life: Lifetime, account: GoogleAccount, ask: typeof fetch = fetch): Calendar {
+  const of = account.signIn()
   const call = async (url: string, init: RequestInit, signal: AbortSignal): Promise<Response> => {
     const asked = (key: GoogleKey) => {
       signal.throwIfAborted()
       return ask(url, { ...init, signal, headers: { ...init.headers, authorization: `Bearer ${key.value}` } })
     }
-    const key = await life.guard(account.token(signal))
+    const key = await life.guard(account.token(of, signal))
     const first = await life.guard(asked(key))
     if (first.status !== 401) return first
     const renewed = await life.guard(account.refused(key, signal))

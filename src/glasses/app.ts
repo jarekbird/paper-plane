@@ -281,7 +281,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       say: 'Send and add',
       hint: 'Sends the reply on screen and adds the meeting on screen to the calendar',
       risk: 'voice',
-      blocked: () => busy() ?? unseen() ?? (event && book && diary()?.calendar === book.calendar ? null : WORDS.noTime),
+      blocked: () => busy() ?? unseen() ?? (offering() ? null : WORDS.noTime),
       run: () => deliver(true),
     })
     const keep = action({
@@ -352,13 +352,14 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         redraw()
       },
     })
-    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : event ? WORDS.tapOrAdd : WORDS.tapToSend)
+    const offering = () => event !== null && book !== null && diary()?.calendar === book.calendar
+    const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : offering() ? WORDS.tapOrAdd : WORDS.tapToSend)
 
     const self: Screen = {
       id: `draft:${id}`,
       actions: () => [
         send,
-        ...(event && book && diary()?.calendar === book.calendar ? [sendAndAdd] : []),
+        ...(offering() ? [sendAndAdd] : []),
         keep,
         ...(writer && spoken ? [words === asSaid ? write : revert] : []),
         scroll.down,
@@ -372,7 +373,9 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         void writeOut()
       },
       view: () =>
-        boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot(), eventLine), { on: { tap: send, down: scroll.down, up: scroll.up } }),
+        boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot(), offering() ? eventLine : undefined), {
+          on: { tap: send, down: scroll.down, up: scroll.up },
+        }),
     }
     chatOn.set(self, { chat: id, covers: true })
     return self

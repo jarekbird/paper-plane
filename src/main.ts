@@ -45,10 +45,13 @@ async function ownAccount() {
 const own = await ownAccount()
 
 function ownCalendar() {
-  if (how.own === 'sample') return { account: demoCalendarAccount({ connected: false }), calendar: demoCalendar() }
+  if (how.own === 'sample') {
+    const sample = demoCalendar()
+    return { account: demoCalendarAccount({ connected: false }), calendar: () => sample }
+  }
   if (!relay || how.said) return undefined
   const account = googleAccount(life, { relay, place: google })
-  return { account, calendar: calendarOver(life, account) }
+  return { account, calendar: () => calendarOver(life, account) }
 }
 
 const calendar = ownCalendar()

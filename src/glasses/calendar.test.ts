@@ -333,7 +333,7 @@ describe('a reply to a message that names a time', () => {
     await say()
     disconnect()
     await settle()
-    expect(fake.lines().slice(0, 2)).toEqual(['To Anna', 'See you there'])
+    expect(fake.lines()).toEqual(['To Anna', 'See you there', 'Tap to send'])
     expect(menu()).not.toContain('Send and add')
     await tap()
     expect(sent()).toEqual([['anna', 'See you there']])

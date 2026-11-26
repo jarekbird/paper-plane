@@ -32,7 +32,7 @@ describe('where the Google service connects', () => {
     await calendar.next(clock, live)
     await calendar.remove(added, live)
     clock += 61 * 60_000
-    await account.token(live)
+    await account.token(account.signIn(), live)
     await account.signOut()
     expect([...new Set(asked)].sort()).toEqual([
       'https://oauth2.googleapis.com',

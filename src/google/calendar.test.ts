@@ -151,9 +151,9 @@ describe('Google Calendar', () => {
     const added = await calendar.add({ title: 'Anna', start: NOW + 600_000, end: NOW + 4_200_000 }, live())
     const token = account.token
     let release = () => {}
-    account.token = async signal => {
+    account.token = async (of, signal) => {
       await new Promise<void>(resolve => (release = resolve))
-      return token(signal)
+      return token(of, signal)
     }
     const caller = new AbortController()
     const removing = calendar.remove(added, caller.signal).catch(() => 'left')
@@ -162,5 +162,27 @@ describe('Google Calendar', () => {
     release()
     expect(await removing).toBe('left')
     expect(side.asked.filter(call => call.method === 'DELETE')).toEqual([])
+  })
+
+  it('A5: belongs to the Google account it was made under: after the user connects another, it adds nothing and takes nothing back there', async () => {
+    const { calendar, side, account } = await world()
+    const added = await calendar.add({ title: 'Anna', start: NOW + 600_000, end: NOW + 4_200_000 }, live())
+    await account.signOut()
+    await account.finish(side.consent(await account.begin()), live())
+    side.asked.length = 0
+    await expect(calendar.remove(added, live())).rejects.toBeInstanceOf(GoogleEnded)
+    await expect(calendar.add({ title: 'Sam', start: NOW + 600_000, end: NOW + 4_200_000 }, live())).rejects.toBeInstanceOf(GoogleEnded)
+    await expect(calendar.next(NOW, live())).rejects.toBeInstanceOf(GoogleEnded)
+    expect(side.asked.filter(call => call.host === 'www.googleapis.com')).toEqual([])
+    expect(side.events().map(event => event.summary)).toEqual(['Anna'])
+    expect(await account.known()).toBe(true)
+  })
+
+  it('works for the account connected now when it is made anew', async () => {
+    const { side, account, life } = await world()
+    await account.signOut()
+    await account.finish(side.consent(await account.begin()), live())
+    const fresh = calendarOver(life, account, side.ask)
+    expect((await fresh.add({ title: 'Sam', start: NOW + 600_000, end: NOW + 4_200_000 }, live())).title).toBe('Sam')
   })
 })

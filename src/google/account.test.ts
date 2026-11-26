@@ -73,14 +73,14 @@ describe('the Google sign-in on the phone', () => {
   it('uses the key it has while it is good, and renews it through the relay a minute before it runs out', async () => {
     const { account, connect, side, later } = world()
     await connect()
-    const first = await account.token(live())
+    const first = await account.token(account.signIn(), live())
     later(58 * 60_000)
-    expect(await account.token(live())).toEqual(first)
+    expect(await account.token(account.signIn(), live())).toEqual(first)
     later(90_000)
-    const second = await account.token(live())
+    const second = await account.token(account.signIn(), live())
     expect(second.value).not.toBe(first.value)
     expect(side.asked.at(-1)).toMatchObject({ host: 'relay.example', path: '/google/refresh' })
-    expect(await account.token(live())).toEqual(second)
+    expect(await account.token(account.signIn(), live())).toEqual(second)
   })
 
   it('forgets the sign-in, tells listeners and says it has ended when Google no longer renews it', async () => {
@@ -90,7 +90,7 @@ describe('the Google sign-in on the phone', () => {
     account.onChange(() => told++)
     side.end()
     later(61 * 60_000)
-    await expect(account.token(live())).rejects.toBeInstanceOf(GoogleEnded)
+    await expect(account.token(account.signIn(), live())).rejects.toBeInstanceOf(GoogleEnded)
     expect(kept()).toBeNull()
     expect(told).toBe(1)
     expect(await account.known()).toBe(false)
@@ -107,7 +107,7 @@ describe('the Google sign-in on the phone', () => {
       ask: async (input, init) => (String(input).includes('/google/refresh') ? new Response('{}', { status: 502 }) : ask(input, init)),
       now: () => 1_800_000_000_000 + 61 * 60_000,
     })
-    await expect(failing.token(live())).rejects.not.toBeInstanceOf(GoogleEnded)
+    await expect(failing.token(failing.signIn(), live())).rejects.not.toBeInstanceOf(GoogleEnded)
     expect(made.kept()).not.toBeNull()
   })
 
@@ -127,7 +127,7 @@ describe('the Google sign-in on the phone', () => {
     const { account, connect, side, later } = world()
     await connect()
     later(61 * 60_000)
-    await account.token(live())
+    await account.token(account.signIn(), live())
     await account.signOut()
     expect([...new Set(side.asked.map(call => call.host))].sort()).toEqual(['oauth2.googleapis.com', 'relay.example'])
   })
@@ -137,7 +137,7 @@ describe('the Google sign-in on the phone', () => {
     await connect()
     const { refresh, access } = JSON.parse(kept()!) as { refresh: string; access: string }
     life.end()
-    const error = await account.token(live()).catch((thrown: unknown) => thrown)
+    const error = await account.token(account.signIn(), live()).catch((thrown: unknown) => thrown)
     expect(String((error as Error).message)).not.toContain(refresh)
     expect(String((error as Error).message)).not.toContain(access)
   })
@@ -170,7 +170,7 @@ describe('the Google sign-in on the phone', () => {
     await made.connect()
     made.later(61 * 60_000)
     const slow = answersLate(made, '/google/refresh')
-    const renewing = slow.account.token(live()).catch((error: unknown) => error)
+    const renewing = slow.account.token(slow.account.signIn(), live()).catch((error: unknown) => error)
     await until(() => slow.waiting.length === 1)
     await slow.account.signOut()
     slow.release()
@@ -187,7 +187,7 @@ describe('the Google sign-in on the phone', () => {
       made.later(61 * 60_000)
       if (outcome === 'refused') made.side.forget()
       const slow = answersLate(made, '/google/refresh')
-      const renewing = slow.account.token(live()).catch((error: unknown) => error)
+      const renewing = slow.account.token(slow.account.signIn(), live()).catch((error: unknown) => error)
       await until(() => slow.waiting.length === 1)
       await slow.account.signOut()
       expect(await slow.account.finish(made.side.consent(await slow.account.begin()), live())).toBe(true)
@@ -209,7 +209,7 @@ describe('the Google sign-in on the phone', () => {
       if (next !== null && release === null) await new Promise<void>(resolve => (release = resolve))
       return save(next)
     }
-    const renewing = made.account.token(live()).catch((error: unknown) => error)
+    const renewing = made.account.token(made.account.signIn(), live()).catch((error: unknown) => error)
     await until(() => release !== null)
     const leaving = made.account.signOut()
     await tick()
@@ -224,7 +224,7 @@ describe('the Google sign-in on the phone', () => {
     const { account, connect, side, later } = world()
     await connect()
     later(61 * 60_000)
-    const [first, second] = await Promise.all([account.token(live()), account.token(live())])
+    const [first, second] = await Promise.all([account.token(account.signIn(), live()), account.token(account.signIn(), live())])
     expect(first).toEqual(second)
     expect(side.asked.filter(call => call.path === '/google/refresh')).toHaveLength(1)
   })
@@ -232,7 +232,7 @@ describe('the Google sign-in on the phone', () => {
   it('renews a key Google refused although its time was not up, and gives the key it already has when another call renewed it', async () => {
     const { account, connect, side } = world()
     await connect()
-    const old = await account.token(live())
+    const old = await account.token(account.signIn(), live())
     side.expire()
     const renewed = await account.refused(old, live())
     expect(renewed.value).not.toBe(old.value)
@@ -245,10 +245,10 @@ describe('the Google sign-in on the phone', () => {
     await made.connect()
     made.later(61 * 60_000)
     made.side.down(true)
-    await expect(made.account.token(live())).rejects.not.toBeInstanceOf(GoogleEnded)
+    await expect(made.account.token(made.account.signIn(), live())).rejects.not.toBeInstanceOf(GoogleEnded)
     expect(await made.account.known()).toBe(true)
     made.side.down(false)
-    expect((await made.account.token(live())).value).toMatch(/^access-/)
+    expect((await made.account.token(made.account.signIn(), live())).value).toMatch(/^access-/)
   })
 
   it('drops the sign-in, and tells listeners, when asked to: Google refused even a renewed key', async () => {
@@ -256,7 +256,7 @@ describe('the Google sign-in on the phone', () => {
     await connect()
     let told = 0
     account.onChange(() => told++)
-    await account.drop(await account.token(live()))
+    await account.drop(await account.token(account.signIn(), live()))
     expect(kept()).toBeNull()
     expect(told).toBe(1)
   })
@@ -264,7 +264,7 @@ describe('the Google sign-in on the phone', () => {
   it('A5: gives no key of a new sign-in to a call that began under the one before it, and drops only the sign-in it is told to', async () => {
     const { account, connect, side, kept } = world()
     await connect()
-    const old = await account.token(live())
+    const old = await account.token(account.signIn(), live())
     await account.signOut()
     expect(await account.finish(side.consent(await account.begin()), live())).toBe(true)
     const fresh = kept()
@@ -272,5 +272,16 @@ describe('the Google sign-in on the phone', () => {
     await account.drop(old)
     expect(kept()).toBe(fresh)
     expect(await account.known()).toBe(true)
+  })
+
+  it('A5: gives a key only for the sign-in it is asked about', async () => {
+    const { account, connect, side } = world()
+    await connect()
+    const first = account.signIn()
+    await account.signOut()
+    await account.finish(side.consent(await account.begin()), live())
+    expect(account.signIn()).not.toBe(first)
+    await expect(account.token(first, live())).rejects.toBeInstanceOf(GoogleEnded)
+    expect((await account.token(account.signIn(), live())).value).toMatch(/^access-/)
   })
 })

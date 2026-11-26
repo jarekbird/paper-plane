@@ -21,7 +21,7 @@ export interface AppParts {
   telegram?: { account: Account; messenger: Messenger }
   hearing?: Hearing
   writer?: Writer
-  calendar?: { sample: Calendar; own?: { account: CalendarAccount; calendar: Calendar } }
+  calendar?: { sample: Calendar; own?: { account: CalendarAccount; calendar(): Calendar } }
   build?: Build
   phone?: (session: Lifetime, parts: PhoneParts) => void
 }
@@ -57,7 +57,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     diaryLife?.end()
     diaryLife = null
     diary = null
-    const calendar = linked && calendars?.own ? calendars.own.calendar : who ? undefined : calendars?.sample
+    const calendar = linked && calendars?.own ? calendars.own.calendar() : who ? undefined : calendars?.sample
     const told = () => {
       for (const listener of [...diaryListeners]) listener()
     }
@@ -132,9 +132,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     const { account } = calendars.own
     linked = await life.guard(kept(account))
     const relink = async () => {
-      const now = await life.guard(kept(account))
-      if (now === linked) return
-      linked = now
+      linked = await life.guard(kept(account))
       if (shown) book(shown.who)
     }
     life.own(account.onChange(() => void relink().catch(() => {})))

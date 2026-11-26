@@ -20,7 +20,8 @@ export interface GoogleKey {
 }
 
 export interface GoogleAccount extends CalendarAccount {
-  token(signal: AbortSignal): Promise<GoogleKey>
+  signIn(): number
+  token(of: number, signal: AbortSignal): Promise<GoogleKey>
   refused(key: GoogleKey, signal: AbortSignal): Promise<GoogleKey>
   drop(key: GoogleKey): Promise<void>
 }
@@ -149,9 +150,10 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       tell()
       return true
     },
-    token: async signal => {
+    signIn: () => signIn,
+    token: async (asked, signal) => {
       const { have, of } = await life.guard(current())
-      if (have === null) throw new GoogleEnded()
+      if (have === null || of !== asked) throw new GoogleEnded()
       if (have.until - now() > EARLY_MS) return { value: have.access, of }
       return { value: await life.guard(renewed(have, of, signal)), of }
     },
