@@ -69,7 +69,9 @@ The same script works for both: each shot names what the glasses show.
 Before filming:
 
 1. Accept the tester invitation in the Even app and install the beta.
-2. On the phone page, pick three chats: one person, one group, one channel.
+2. On the phone page, pick four chats: two people, one group, one channel. The script calls the two people Anna
+   and Sam, as the sample account does (there, tick Sam: he is not picked at the start); a chat can be opened or
+   written to by name only when it is picked.
 3. Have someone ready to send a message on cue (or a second account of your own).
 4. Charge the glasses; film in a room dim enough for the display to show on camera.
 5. For simulator shots: `npm run dev`, then `npx evenhub-simulator http://127.0.0.1:5183`, and record the screen.
@@ -87,8 +89,12 @@ Before filming:
 | 2:25–2:40 | Phone page: "To Telegram", "Kept by us: Nothing", "Sent in your name: Only what you tapped". Then glasses: "Cannot reach Telegram". | Scroll the page. Turn on flight mode, tap send. | "It is a real Telegram client on my phone. No bot, no server of mine. And when something is wrong, it says so." |
 | 2:40–2:55 | The README's results, then the repository. | | "48 of 50 voice commands right on the real model. Open source, built this week on Earshot. Paper Plane." |
 
-Shots that need a real Telegram sign-in: 1:55–2:10 (the draft on the phone) and the incoming message at 0:00. On
-the sample account, film "Kept as a draft" on the glasses instead and drop the phone shot.
+Shots that need a real Telegram sign-in: 1:55–2:10 (the draft on the phone), the incoming message at 0:00, and
+"Cannot reach Telegram" by flight mode at 2:25. On the sample account: film "Kept as a draft" on the glasses
+instead and drop the phone shot; and for "Cannot reach Telegram" open the app with `#trouble=unreachable`
+(`http://127.0.0.1:5183/#trouble=unreachable&say=See you at noon` in the simulator), where the sample chats lose
+Telegram eight seconds after launch and have it back at thirty: open a chat and say the reply first, then tap to
+send inside that window.
 
 If time runs short, cut 2:10–2:25 first, then 1:10–1:25.
 
