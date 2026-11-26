@@ -230,8 +230,10 @@ describe('the Telegram adapter', () => {
     'updateFolderPeers',
     'updateNotifySettings',
     'updateDialogUnreadMark',
+    'updateReadMessagesContents',
+    'updateChannelReadMessagesContents',
   ])(
-    'tells listeners on %s: a folder was changed, or a chat was archived, muted or marked unread, which can move it in or out of a folder',
+    'tells listeners on %s: a folder was changed, a chat was archived, muted or marked unread, or a mention was read on another device',
     name => {
       const fake = fakeClient()
       let told = 0

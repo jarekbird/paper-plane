@@ -4,7 +4,7 @@ import { BaseTelegramClient, TelegramClient } from '@mtcute/core/client.js'
 import { randomLong } from '@mtcute/core/utils.js'
 import type { Account, Messenger } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
-import { foldersOf } from './folders.ts'
+import { asksWhoIsMuted, foldersOf, mutedBy, NONE_MUTED } from './folders.ts'
 import { messengerOver, type ClientLike, type LinkState, type RawLike } from './messenger.ts'
 import { clientOptions, type TelegramApp } from './options.ts'
 import { ANSWER_MS, answerWithin } from './trouble.ts'
@@ -40,7 +40,15 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
       for (const listener of raw) current.onRawUpdate.add(listener)
       await old.destroy()
     },
-    folders: async () => foldersOf((await current.getFolders()).filters),
+    folders: async () => {
+      const { filters } = await current.getFolders()
+      if (!asksWhoIsMuted(filters)) return foldersOf(filters, NONE_MUTED)
+      const scopes = ['inputNotifyUsers', 'inputNotifyChats', 'inputNotifyBroadcasts'] as const
+      const [people, groups, channels] = await Promise.all(
+        scopes.map(async scope => mutedBy(await current.call({ _: 'account.getNotifySettings', peer: { _: scope } }), Date.now())),
+      )
+      return foldersOf(filters, { people, groups, channels })
+    },
     iterDialogs: params => current.iterDialogs(params),
     getHistory: (chat, params) => current.getHistory(chat, params),
     randomId: () => randomLong(),

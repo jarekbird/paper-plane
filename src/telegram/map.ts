@@ -76,6 +76,8 @@ const FOLDER_CHANGES = new Set([
   'updateFolderPeers',
   'updateNotifySettings',
   'updateDialogUnreadMark',
+  'updateReadMessagesContents',
+  'updateChannelReadMessagesContents',
 ])
 
 export const foldersChanged = (told: { update: { _: string } }): boolean => FOLDER_CHANGES.has(told.update._)
