@@ -86,21 +86,30 @@ Before filming:
 | Time | On screen | Do and say | Voice-over |
 | --- | --- | --- | --- |
 | 0:00–0:10 | You, hands busy (cooking, or walking with a bag). The phone buzzes on the table and stays there. | Glance up. | "A message. I do not need my phone for this." |
-| 0:10–0:25 | Glasses: the list of picked chats, one with (2); the top line says "Next: 11 AM Design review". | Tap. The chat opens, newest message first. | "Paper Plane puts the Telegram chats I pick on my Even G2, under my next meeting. One tap, and I am reading." |
+| 0:10–0:25 | Glasses: the list of picked chats, one with (2); the top line says "Next: 11 AM Design review" (your own next meeting, at its time). | Tap. The chat opens, newest message first. | "Paper Plane puts the Telegram chats I pick on my Even G2, under my next meeting. One tap, and I am reading." |
 | 0:25–0:45 | Glasses: Sam's chat, then "To Sam / Almost there, save me a seat / Tap to send", then "Sent. Tap to undo". | Hold, say "Almost there, save me a seat", let go, tap. | "To answer I hold and speak. I see my exact words before anything goes, and one tap sends them." |
-| 0:45–1:05 | Glasses: Anna's "I can do 12:30 at the usual place.", then the reply with "Calendar: Today 12:30 to 1:30 PM, Anna", then "Sent and added. Tap to undo". | Hold, say "See you there". Open the menu, choose "Send and add". | "She names a time. My answer goes to Telegram and the meeting to my Google Calendar: both shown first, and one undo takes back both." |
+| 0:45–1:05 | Glasses: Anna's "I can do 12:30 at the usual place.", then the reply with "Calendar: Today 12:30 to 1:30 PM, Anna" (the day and time the message names), then "Sent and added. Tap to undo". | Hold, say "See you there". Open the menu, choose "Send and add". | "She names a time. My answer goes to Telegram and the meeting to my Google Calendar: both shown first, and one undo takes back both." |
 | 1:05–1:20 | Glasses: "Writing it out…", then the full message. | In a chat, hold, say "tell her yes and ask where", check, tap. | "If I say less, it writes more. It only ever works on what I say: no model reads my chats." |
 | 1:20–1:32 | Glasses: the three short answers. | Tap the chat, swipe to a phrase, tap. | "No time to talk: Yes, No, or my own phrases, in two taps." |
 | 1:32–1:57 | Glasses: the list, then a draft to Sam; then a chat, then "Like: the top message from someone else? Tap to confirm". | From the list, hold: "message Sam the demo moved to four". Tap. In a chat, hold: "like that". Tap. Hold: "go home". | "And everything works by voice, from any screen. Message someone by name. Like a message. Go home." |
 | 1:57–2:10 | Phone: Telegram's chat list with the draft in it. | In a chat, say a reply, then menu > Keep for later. Show the phone. | "Not ready to send? Keep it. It is the chat's draft in Telegram, waiting on my phone." |
 | 2:10–2:22 | Glasses: a channel's posts, then "Sponsored". | Open the channel, swipe down. | "Channels too, with Telegram's sponsored message, as Telegram asks of a client." |
-| 2:22–2:40 | Phone page: "To Telegram", "Kept by us: Nothing", "Sent in your name: Only what you tapped". Then glasses: "Cannot reach Telegram". | Scroll the page. Turn on flight mode, tap send. | "It is a real Telegram client on my phone. No bot, no server of mine. And when something is wrong, it says so." |
+| 2:22–2:40 | Phone page: "To Telegram", "Kept by us", "Sent in your name: Only what you tapped". Then glasses: "Cannot reach Telegram". | Scroll the page. Turn on flight mode, tap send. | "It is a real Telegram client on my phone. No bot, no server of mine. And when something is wrong, it says so." |
 | 2:40–2:55 | The README's results, then the repository. | | "48 of 50 voice commands right on the real model. Open source, built this week on Earshot. Paper Plane." |
 
 Shots that need a real Telegram sign-in: 1:57–2:10 (the draft on the phone), the incoming message at 0:00, and
 "Cannot reach Telegram" by flight mode at 2:22. The calendar shot at 0:45 needs Google Calendar connected on the
-phone page, and a message with a time in it as the newest of the chat; on the sample account it works as written,
-on the sample calendar (Anna's chat, and "Next: … Design review" on the list). On the sample account: film "Kept as a draft" on the glasses
+phone page, and a message with a time in it as the newest of the chat.
+
+On the sample account the two calendar screens read differently from the table, and by the clock:
+
+- The top line is "Sample chats, next 1 PM Design review". The sample meeting starts on the hour, one to two hours
+  after the app was opened, so the time shown is never the table's.
+- Anna's "I can do 12:30" is counted from when the app was opened. Opened before 12:30, the line says "Calendar:
+  Today 12:30 to 1:30 PM, Anna"; opened later, it says "Tomorrow". To film it as the table has it, open the app
+  before 12:30; otherwise say "tomorrow" in the voice-over.
+
+Also on the sample account: film "Kept as a draft" on the glasses
 instead and drop the phone shot; and for "Cannot reach Telegram" open the app with `#trouble=unreachable`
 (`http://127.0.0.1:5183/#account=sample&trouble=unreachable&say=See you at noon` in the simulator; `account=sample`
 is needed in a build that has Telegram in it, where trouble is never staged on your own chats), where the sample chats lose
