@@ -26,23 +26,39 @@ Telegram.
   ("One chat"). A chat you name is matched on the phone and is not part of that list.
 - No model reads your chats. AI works on what you say, never on what Telegram holds.
 
+## To Google
+
+Only if you connect Google Calendar. Then your next meeting is read from Google, and a meeting you confirm with a
+tap is added there with its time and the name of its chat, straight from this phone. The Google sign-in itself
+passes through Paper Plane's relay when you connect and when it is renewed.
+
+- Connecting is done in a browser, at Google. The app asks for one thing: to see and change the events of your
+  calendars. It reads the next meeting that has a time, and adds only what you confirm.
+- Google gives a sign-in only to a server that holds the app's secret, so the relay takes it from Google and shows
+  you a six-digit code. Typed into the app within five minutes, the code lets this phone pick the sign-in up, once.
+  After that the relay has it no more. About once an hour the phone asks the relay to renew it; the relay passes
+  that on to Google and keeps nothing.
+- No meeting and no calendar entry goes through the relay or to an AI model.
+
 ## Kept on this phone
 
-Your Telegram sign-in, the chats you picked and your quick replies. Signing out removes the sign-in.
+Your Telegram sign-in, the chats you picked, your quick replies and, if you connect it, your Google sign-in.
+Signing out or disconnecting removes a sign-in.
 
 They are kept in the Even Realities app's storage for this app, and in the web view's own storage as a second copy.
 
 ## Kept by us
 
-Nothing. The relay stores nothing and keeps no log of what it is sent.
+Nothing but a Google sign-in on its way to this phone: the relay keeps it for five minutes at most and hands it
+over once. It keeps no log of what it is sent.
 
-There are no accounts with us, no analytics and no advertising. The app connects to two places only, both listed
-in `app.json`: Telegram and the relay.
+There are no accounts with us, no analytics and no advertising. The app connects to three places only, all listed
+in `app.json`: Telegram, the relay, and Google once you connect your calendar.
 
 ## Sent in your name
 
-Only what you tapped. A message, a like or a save happens after the glasses showed it and you tapped, never on the
-word of an AI model.
+Only what you tapped. A message, a like, a save or a meeting happens after the glasses showed it and you tapped,
+never on the word of an AI model.
 
 ## Questions
 

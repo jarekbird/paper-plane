@@ -1,8 +1,10 @@
 import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
+import { Agenda } from './agenda.ts'
 import { startGlasses, startWaiting, type Hearing } from './glasses/app.ts'
 import type { Display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
-import type { Account, Messenger, Who, Writer } from './messenger.ts'
+import type { Account, Calendar, CalendarAccount, Messenger, Who, Writer } from './messenger.ts'
+import { Connect } from './phone/calendar.ts'
 import type { PhoneParts } from './phone/page.ts'
 import type { Build } from './phone/privacy.ts'
 import { SignIn } from './phone/signin.ts'
@@ -19,12 +21,14 @@ export interface AppParts {
   telegram?: { account: Account; messenger: Messenger }
   hearing?: Hearing
   writer?: Writer
+  calendar?: { sample: Calendar; own?: { account: CalendarAccount; calendar: Calendar } }
   build?: Build
   phone?: (session: Lifetime, parts: PhoneParts) => void
 }
 
 export interface App {
   signIn: SignIn | null
+  connect: Connect | null
   scope(): Scope
   inbox(): Inbox | null
 }
@@ -40,7 +44,11 @@ const SAMPLE_TITLE = 'Sample chats'
 
 export async function startApp(parts: AppParts): Promise<App> {
   const { life, display, store, sample, telegram, hearing, writer, phone } = parts
-  const build = parts.build ?? { telegram: false, voice: false }
+  const build = parts.build ?? { telegram: false, voice: false, calendar: false }
+  const calendars = parts.calendar
+  const connect = calendars?.own ? new Connect(life, calendars.own.account) : null
+  let linked = false
+  let shown: { who: Who | null } | null = null
   const phrases = new Phrases(store)
   await life.guard(phrases.start())
   let session = life.child()
@@ -52,8 +60,9 @@ export async function startApp(parts: AppParts): Promise<App> {
     session = life.child()
     scope = 'connecting'
     inbox = null
+    shown = null
     startWaiting(session, display, NOTES.connecting)
-    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.connecting, build })
+    phone?.(session, { inbox: null, phrases, signIn, connect, note: NOTES.connecting, build })
   }
 
   const show = (who: Who | null, ended = false) => {
@@ -64,6 +73,10 @@ export async function startApp(parts: AppParts): Promise<App> {
     const opened = new Inbox(current, messenger, store, who ? `telegram:${who.id}` : 'sample')
     scope = who ? 'telegram' : 'sample'
     inbox = opened
+    shown = { who }
+    const calendar = linked && calendars?.own ? calendars.own.calendar : who ? undefined : calendars?.sample
+    const agenda = calendar ? new Agenda(current, calendar) : undefined
+    if (agenda) void agenda.refresh()
     const { shell } = startGlasses(current, display, {
       ...(who ? {} : { title: SAMPLE_TITLE }),
       inbox: opened,
@@ -71,9 +84,10 @@ export async function startApp(parts: AppParts): Promise<App> {
       phrases,
       ...(hearing ? { hearing } : {}),
       ...(writer ? { writer } : {}),
+      ...(calendar && agenda ? { calendar, agenda, sampleMeetings: calendar === calendars?.sample } : {}),
     })
     if (ended && !who) shell.notice(ENDED)
-    phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope], build })
+    phone?.(current, { inbox: opened, phrases, signIn, connect, note: NOTES[scope], build })
     const fill = async () => {
       await current.guard(opened.start())
       if (!who && opened.fresh) await current.guard(opened.pick(sample.picks))
@@ -82,7 +96,7 @@ export async function startApp(parts: AppParts): Promise<App> {
   }
 
   const signIn: SignIn | null = telegram ? new SignIn(life, telegram.account, show) : null
-  const kept = async (account: Account) => {
+  const kept = async (account: Pick<Account, 'known'>) => {
     try {
       return await life.guard(account.known())
     } catch (error) {
@@ -91,6 +105,18 @@ export async function startApp(parts: AppParts): Promise<App> {
     }
   }
   const known = telegram ? await life.guard(kept(telegram.account)) : false
+  if (calendars?.own) {
+    const { account } = calendars.own
+    linked = await life.guard(kept(account))
+    const relink = async () => {
+      const now = await life.guard(kept(account))
+      if (now === linked) return
+      linked = now
+      if (shown) show(shown.who)
+    }
+    life.own(account.onChange(() => void relink().catch(() => {})))
+    void connect?.start()
+  }
   if (known) wait()
   else show(null)
   const offline = (model: SignIn) => {
@@ -98,8 +124,9 @@ export async function startApp(parts: AppParts): Promise<App> {
     session = life.child()
     scope = 'offline'
     inbox = null
+    shown = null
     startWaiting(session, display, NOTES.offline, () => void retry(model))
-    phone?.(session, { inbox: null, phrases, signIn, note: NOTES.offline, build })
+    phone?.(session, { inbox: null, phrases, signIn, connect, note: NOTES.offline, build })
   }
 
   const retry = async (model: SignIn) => {
@@ -124,5 +151,5 @@ export async function startApp(parts: AppParts): Promise<App> {
     else if (known) show(null, true)
   }
   if (signIn) void restore(signIn)
-  return { signIn, scope: () => scope, inbox: () => inbox }
+  return { signIn, connect, scope: () => scope, inbox: () => inbox }
 }

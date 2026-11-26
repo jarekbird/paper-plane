@@ -69,6 +69,12 @@ What reaches the glasses is what the user picked on the phone: single chats, or 
 lists the account's folders (`Messenger.folders`) and says for each chat which of them it is in; `src/inbox.ts`
 keeps a folder pick by the folder's id and name, and forgets it when the account no longer lists that folder.
 
+The calendar is a second service behind `src/messenger.ts`: `Calendar` (the next meeting, add one, take one
+back) and `CalendarAccount` (connect, disconnect). `src/google` asks Google's calendar itself; only the sign-in
+goes by the Worker, which trades Google's code for it, keeps it in `worker/pairs.ts` for five minutes at most, and
+hands it over once for the phone's own secret and the six digits the user typed. `src/agenda.ts` keeps the next
+meeting fresh for the screens; `src/when.ts` reads a time out of a message, on the phone, by rules.
+
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
 `Shell` reads the touchpad, runs the action a tap, a swipe, the menu or the voice chose, and its `Glasses` alone
 talks to the Even SDK bridge. Timers, listeners, sockets and requests belong to an Earshot `Lifetime` (A4), and code
@@ -86,9 +92,12 @@ flowchart LR
   _mtcute["@mtcute"]
   earshot["earshot"]
   src_account_contract_ts["src/account.contract.ts"]
+  src_agenda_ts["src/agenda.ts"]
   src_app_ts["src/app.ts"]
+  src_calendar_contract_ts["src/calendar.contract.ts"]
   src_demo["src/demo"]
   src_glasses["src/glasses"]
+  src_google["src/google"]
   src_inbox_ts["src/inbox.ts"]
   src_instruction_ts["src/instruction.ts"]
   src_launch_ts["src/launch.ts"]
@@ -103,19 +112,25 @@ flowchart LR
   src_telegram["src/telegram"]
   src_trouble_ts["src/trouble.ts"]
   src_voice["src/voice"]
+  src_when_ts["src/when.ts"]
   src_writer_contract_ts["src/writer.contract.ts"]
   src_account_contract_ts --> src_messenger_ts
+  src_agenda_ts --> earshot
+  src_agenda_ts --> src_messenger_ts
   src_app_ts --> earshot
+  src_app_ts --> src_agenda_ts
   src_app_ts --> src_glasses
   src_app_ts --> src_inbox_ts
   src_app_ts --> src_messenger_ts
   src_app_ts --> src_phone
   src_app_ts --> src_phrases_ts
   src_app_ts --> src_trouble_ts
+  src_calendar_contract_ts --> src_messenger_ts
   src_demo --> earshot
   src_demo --> src_instruction_ts
   src_demo --> src_messenger_ts
   src_glasses --> earshot
+  src_glasses --> src_agenda_ts
   src_glasses --> src_inbox_ts
   src_glasses --> src_instruction_ts
   src_glasses --> src_messenger_ts
@@ -123,6 +138,9 @@ flowchart LR
   src_glasses --> src_phrases_ts
   src_glasses --> src_replies_ts
   src_glasses --> src_trouble_ts
+  src_glasses --> src_when_ts
+  src_google --> earshot
+  src_google --> src_messenger_ts
   src_inbox_ts --> earshot
   src_inbox_ts --> src_messenger_ts
   src_inbox_ts --> src_trouble_ts
@@ -131,6 +149,7 @@ flowchart LR
   src_main_ts --> src_app_ts
   src_main_ts --> src_demo
   src_main_ts --> src_glasses
+  src_main_ts --> src_google
   src_main_ts --> src_launch_ts
   src_main_ts --> src_phone
   src_main_ts --> src_store_ts

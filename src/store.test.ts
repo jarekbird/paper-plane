@@ -62,4 +62,18 @@ describe('where the sign-in is kept on the phone', () => {
     expect(settled).toBe(true)
     expect(await createStore([slow]).get('telegram-session')).toBeNull()
   })
+
+  it('S3: keeps the Google sign-in the same way, apart from the Telegram one, and removes it from every copy', async () => {
+    const even = memoryPlace()
+    const web = memoryPlace()
+    const { google, sessions } = storeOver([even, web])
+    await sessions.save('session-1')
+    await google.save('google-1')
+    expect(await google.load()).toBe('google-1')
+    await google.save(null)
+    expect(await google.load()).toBeNull()
+    expect(await createStore([even]).get('google-sign-in')).toBeNull()
+    expect(await createStore([web]).get('google-sign-in')).toBeNull()
+    expect(await sessions.load()).toBe('session-1')
+  })
 })

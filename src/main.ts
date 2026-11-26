@@ -2,10 +2,14 @@ import { waitForEvenAppBridge } from '@evenrealities/even_hub_sdk'
 import { Lifetime, scriptedSpeech } from 'earshot'
 import { startApp } from './app.ts'
 import { demoAccount } from './demo/account.ts'
+import { demoCalendarAccount } from './demo/calendar-account.ts'
+import { demoCalendar } from './demo/calendar.ts'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
 import { stage } from './demo/trouble.ts'
 import { demoWriter } from './demo/writer.ts'
 import { display } from './glasses/display.ts'
+import { googleAccount } from './google/account.ts'
+import { calendarOver } from './google/calendar.ts'
 import { launch } from './launch.ts'
 import { startPhone } from './phone/page.ts'
 import { appStore } from './store.ts'
@@ -21,7 +25,7 @@ const writer = how.said ? demoWriter() : relay ? writerThrough(relay) : undefine
 
 const life = new Lifetime()
 const bridge = await waitForEvenAppBridge()
-const { store, sessions } = appStore(bridge)
+const { store, sessions, google } = appStore(bridge)
 
 const samples = demoMessenger()
 
@@ -39,6 +43,15 @@ async function ownAccount() {
 }
 
 const own = await ownAccount()
+
+function ownCalendar() {
+  if (how.own === 'sample') return { account: demoCalendarAccount({ connected: false }), calendar: demoCalendar() }
+  if (!relay || how.said) return undefined
+  const account = googleAccount(life, { relay, place: google })
+  return { account, calendar: calendarOver(life, account) }
+}
+
+const calendar = ownCalendar()
 await startApp({
   life,
   display: display(life, bridge, { trace: how.trace }),
@@ -47,6 +60,7 @@ await startApp({
   ...(own ? { telegram: own } : {}),
   ...(hearing ? { hearing } : {}),
   ...(writer ? { writer } : {}),
-  build: { telegram: how.own === 'telegram', voice: Boolean(relay) && !how.said },
+  calendar: { sample: demoCalendar(), ...(calendar ? { own: calendar } : {}) },
+  build: { telegram: how.own === 'telegram', voice: Boolean(relay) && !how.said, calendar: Boolean(calendar) },
   phone: (session, parts) => startPhone(session, document.getElementById('app')!, parts),
 })
