@@ -19,7 +19,7 @@ import { writerThrough } from './voice/writer.ts'
 const id = import.meta.env.VITE_TELEGRAM_API_ID
 const hash = import.meta.env.VITE_TELEGRAM_API_HASH
 const relay = import.meta.env.VITE_RELAY
-const how = launch(location.hash, { id, hash })
+const how = launch(location.hash, { id, hash, relay, google: import.meta.env.VITE_GOOGLE_CALENDAR })
 const hearing = how.said ? { transcribe: scriptedSpeech(how.said) } : relay ? hearingThrough(relay) : undefined
 const writer = how.said ? demoWriter() : relay ? writerThrough(relay) : undefined
 
@@ -45,11 +45,11 @@ async function ownAccount() {
 const own = await ownAccount()
 
 function ownCalendar() {
-  if (how.own === 'sample') {
+  if (how.calendar === 'sample') {
     const sample = demoCalendar()
     return { account: demoCalendarAccount({ connected: false }), calendar: () => sample }
   }
-  if (!relay || how.said) return undefined
+  if (how.calendar !== 'google' || !relay) return undefined
   const account = googleAccount(life, { relay, place: google })
   return { account, calendar: () => calendarOver(life, account) }
 }

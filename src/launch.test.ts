@@ -22,6 +22,22 @@ describe('how the app is started', () => {
     expect(launch('', {}).trace).toBe(false)
   })
 
+  it('A8: offers Google Calendar only in a build that says its relay has Google’s sign-in set up', () => {
+    const relay = 'https://relay.example'
+    expect(launch('', { ...APP, relay, google: 'on' }).calendar).toBe('google')
+    expect(launch('', { relay, google: 'on' }).calendar).toBe('google')
+    expect(launch('', { ...APP, relay }).calendar).toBe('none')
+    expect(launch('', { ...APP, relay, google: 'off' }).calendar).toBe('none')
+    expect(launch('', { ...APP, relay, google: '' }).calendar).toBe('none')
+    expect(launch('', { ...APP, google: 'on' }).calendar).toBe('none')
+    expect(launch('#say=open sam', { ...APP, relay, google: 'on' }).calendar).toBe('none')
+  })
+
+  it('has the sample calendar to connect on the sample account, in any build', () => {
+    expect(launch('#account=sample', {}).calendar).toBe('sample')
+    expect(launch('#account=sample', { ...APP, relay: 'https://relay.example', google: 'on' }).calendar).toBe('sample')
+  })
+
   it('takes scripted speech for the simulator', () => {
     expect(launch('#say=open sam|go back', {}).said).toEqual(['open sam', 'go back'])
     expect(launch('', {}).said).toBeNull()

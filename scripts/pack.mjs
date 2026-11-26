@@ -11,6 +11,7 @@ export function parts(folder) {
   return {
     telegram: Boolean(env.VITE_TELEGRAM_API_ID && env.VITE_TELEGRAM_API_HASH),
     voice: Boolean(env.VITE_RELAY),
+    calendar: Boolean(env.VITE_RELAY) && env.VITE_GOOGLE_CALENDAR === 'on',
   }
 }
 
@@ -28,6 +29,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   execFileSync('npx', ['evenhub', 'pack', 'app.json', OUT, '-o', FILE], { stdio: 'inherit' })
   console.log(
-    `Packed ${FILE}, version ${version}: Telegram ${has.telegram ? 'in' : 'NOT in (sample chats only)'}, voice ${has.voice ? 'on' : 'NOT set up'}.`,
+    `Packed ${FILE}, version ${version}: Telegram ${has.telegram ? 'in' : 'NOT in (sample chats only)'}, voice ${has.voice ? 'on' : 'NOT set up'}, Google Calendar ${has.calendar ? 'on' : 'NOT set up'}.`,
   )
 }

@@ -4,4 +4,5 @@ interface ImportMetaEnv {
   readonly VITE_TELEGRAM_API_ID?: string
   readonly VITE_TELEGRAM_API_HASH?: string
   readonly VITE_RELAY?: string
+  readonly VITE_GOOGLE_CALENDAR?: string
 }

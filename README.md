@@ -45,7 +45,8 @@ This is a build in progress, during the hackathon week.
 - **Tried on real Telegram (26 November):** signing in with number and code from the app in the simulator, the
   list of chats (61 came back), staying signed in over a restart, and signing out. Sending, folders, mentions and
   channels have not been tried there yet.
-- **Google Calendar:** built and tried on the sample calendar. Never run against Google yet.
+- **Google Calendar:** built and tried on the sample calendar. Never run against Google yet, and not in the beta:
+  a build offers it only when it is packed with `VITE_GOOGLE_CALENDAR=on`.
 - **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
@@ -103,7 +104,14 @@ in a Google Cloud project with the Calendar API on, give it the redirect address
 npx wrangler secret put GOOGLE_CLIENT_SECRET --config worker/wrangler.toml
 ```
 
-Without them the app shows no calendar but the sample one. To try the connect step without Google, open
+Then tell the build that its relay can do this, in `.env.local`:
+
+```sh
+VITE_GOOGLE_CALENDAR=on
+```
+
+Without that line the app offers no calendar but the sample one, so nobody is sent to a relay that cannot sign
+them in. To try the connect step without Google, open
 `http://127.0.0.1:5183/#account=sample`, choose "Connect Google Calendar" and type the code `123456`.
 
 Then put its address in `.env.local` as `VITE_RELAY=https://…` and in the network whitelist of `app.json`. What it
