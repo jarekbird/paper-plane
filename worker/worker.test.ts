@@ -68,6 +68,7 @@ describe('the Worker', () => {
       'workers_dev = true',
       '[vars]',
       'UPSTREAM = "https://openrouter.ai"',
+      expect.stringMatching(/^GOOGLE_CLIENT_ID = "\d+-[a-z0-9]+\.apps\.googleusercontent\.com"$/),
       '[[durable_objects.bindings]]',
       'name = "PAIRS"',
       'class_name = "PairStore"',
@@ -77,5 +78,11 @@ describe('the Worker', () => {
     ])
     const code = readFileSync(new URL('./worker.ts', import.meta.url), 'utf8')
     expect(code).not.toMatch(/console|caches|\.put\(|\.get\(|KV|D1|R2|waitUntil/)
+  })
+
+  it('S3: has Google’s client id in its settings and never the client’s secret', () => {
+    const settings = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8')
+    expect(settings).toMatch(/GOOGLE_CLIENT_ID/)
+    expect(settings).not.toMatch(/GOCSPX|SECRET|secret/)
   })
 })

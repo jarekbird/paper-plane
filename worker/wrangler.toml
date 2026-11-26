@@ -5,6 +5,7 @@ workers_dev = true
 
 [vars]
 UPSTREAM = "https://openrouter.ai"
+GOOGLE_CLIENT_ID = "1080736327214-9gt8cpp5dl3hgvabddhl9cd0sqtp54ht.apps.googleusercontent.com"
 
 [[durable_objects.bindings]]
 name = "PAIRS"

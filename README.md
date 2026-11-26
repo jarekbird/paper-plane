@@ -47,8 +47,10 @@ This is a build in progress, during the hackathon week.
   reply sent, there within half a second of the tap, and undone; "Keep for later", which showed as the chat's
   draft in Telegram Web. The words of each hold were scripted. Folders, mentions, channels, reactions and the
   trouble paths have not been tried there yet.
-- **Google Calendar:** built and tried on the sample calendar. Never run against Google yet, and not in the beta:
-  a build offers it only when it is packed with `VITE_GOOGLE_CALENDAR=on`.
+- **Google Calendar:** built and tried on the sample calendar. The relay has its Google client since 26 November
+  (in Google's testing mode: only listed test accounts can connect), and its start address leads to Google's
+  sign-in. No connect has been made yet, and it is not in the beta: a build offers it only when it is packed with
+  `VITE_GOOGLE_CALENDAR=on`.
 - **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
