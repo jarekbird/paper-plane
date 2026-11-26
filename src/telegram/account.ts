@@ -69,6 +69,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     pending = null
     stale = true
     const dropped = done(() => client.drop())
+    dropped.catch(() => {})
     await life.guard(forgotten())
     await life.guard(dropped)
     if (era === mine) for (const told of [...listeners]) told()

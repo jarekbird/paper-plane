@@ -573,4 +573,27 @@ describe('the Telegram account', () => {
     expect(told).toBe(0)
     expect(await made.account.known()).toBe(true)
   })
+
+  it('A4: leaves no failure unheard when the app ends while an ended sign-in is still being forgotten and its connection dropped', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = made.side.client()
+    next.drop = () => new Promise(() => {})
+    const life = new Lifetime()
+    const account = accountOver(life, next, { load: made.place.load, save: () => new Promise(() => {}) })
+    await account.restore()
+    const unheard: unknown[] = []
+    const hear = (reason: unknown) => void unheard.push(reason)
+    process.on('unhandledRejection', hear)
+    try {
+      account.ended(account.era())
+      await turn()
+      life.end()
+      await new Promise(resolve => setTimeout(resolve, 20))
+    } finally {
+      process.off('unhandledRejection', hear)
+    }
+    expect(unheard).toEqual([])
+  })
 })
