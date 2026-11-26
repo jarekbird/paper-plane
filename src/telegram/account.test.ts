@@ -551,4 +551,26 @@ describe('the Telegram account', () => {
     expect(await made.account.known()).toBe(true)
     expect(made.saved()).toMatch(/^session-/)
   })
+
+  it('A5: drops the connection of the sign-in that ended, at once, and never the one of a sign-in made while it was being forgotten', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    let forgot = () => {}
+    made.place.save = session => (session === null ? new Promise<void>(resolve => (forgot = resolve)) : save(session))
+    made.account.ended(made.account.era())
+    await turn()
+    expect(made.first.drops).toBe(1)
+    made.place.save = save
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    let told = 0
+    made.account.onEnded(() => told++)
+    forgot()
+    await turn()
+    expect(made.first.drops).toBe(1)
+    expect(told).toBe(0)
+    expect(await made.account.known()).toBe(true)
+  })
 })
