@@ -880,8 +880,7 @@ describe('the newest message from someone else', () => {
     messenger.arrive('anna', 'Anna', 'One more thing')
     await settle()
     expect(fake.lines()[1]).toBe('Could not load this chat')
-    fake.pick('Like')
-    await settle()
+    expect(fake.menuItems().map(item => item.name)).not.toContain('Like')
     messenger.history = history
     expect((await messenger.history('anna', 6)).some(message => message.liked)).toBe(false)
   })

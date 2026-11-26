@@ -468,6 +468,16 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       },
     })
 
+    const again = action({
+      id: 'reload',
+      say: 'Try again',
+      hint: 'Loads this chat again',
+      blocked: () => (pending ? WORDS.loading : null),
+      run: () => {
+        if (screen) void load(screen)
+      },
+    })
+
     const current = () => !pending && !failed && messages !== null
     const keyOf = (message: Message) => `${message.id}\n${message.text}`
     const inSight = () => (current() && upToDate() ? (inView().find(message => !message.mine) ?? null) : null)
@@ -582,7 +592,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
 
     const self: Screen = {
       id: `chat:${id}`,
-      actions: () => (channel ? [like, save, scroll.down, scroll.up] : [reply, like, save, takeBack, scroll.down, scroll.up]),
+      actions: () =>
+        failed ? [again, takeBack] : channel ? [like, save, scroll.down, scroll.up] : [reply, like, save, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
@@ -603,11 +614,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         void load(entered)
       },
       view: () =>
-        channel
-          ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
-          : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
-              on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
-            }),
+        failed
+          ? boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToRetry), { on: { tap: undo ? takeBack : again } })
+          : channel
+            ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
+            : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
+                on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
+              }),
     }
     if (!channel) chatOn.set(self, { chat: id, covers: false })
     return self

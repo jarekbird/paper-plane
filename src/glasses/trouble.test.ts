@@ -84,9 +84,37 @@ describe('a chat, when Telegram is in trouble', () => {
     expect(fake.lines()).toEqual(ANNA)
     messenger.trouble(UNREACHABLE)
     await settle()
-    expect(fake.lines()).toEqual(['Anna', 'Cannot reach Telegram', 'Tap to reply'])
+    expect(fake.lines()).toEqual(['Anna', 'Cannot reach Telegram', 'Tap to try again'])
     messenger.trouble(null)
     await settle()
+    expect(fake.lines()).toEqual(ANNA)
+  })
+
+  it('offers to try again, by a tap, when it could not load, and offers no reply to messages it does not show', async () => {
+    const { fake, messenger, tap } = await world()
+    const history = messenger.history
+    messenger.history = async () => {
+      throw new TroubleError(UNREACHABLE)
+    }
+    await tap()
+    expect(fake.lines()).toEqual(['Anna', 'Cannot reach Telegram', 'Tap to try again'])
+    expect(fake.menuItems().map(item => item.name)).not.toContain('Reply')
+    messenger.history = history
+    await tap()
+    expect(fake.lines()).toEqual(ANNA)
+  })
+
+  it('A7: tries again when the user says so, as by a tap', async () => {
+    const { fake, messenger, tap, say } = await world(['try again'])
+    const history = messenger.history
+    messenger.history = async () => {
+      throw new Error('anything')
+    }
+    await tap()
+    expect(fake.lines()).toEqual(['Anna', 'Could not load this chat', 'Tap to try again'])
+    messenger.history = history
+    await say()
+    await settle(5_000)
     expect(fake.lines()).toEqual(ANNA)
   })
 
