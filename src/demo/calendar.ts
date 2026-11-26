@@ -21,7 +21,8 @@ export function demoCalendar(now: () => number = Date.now): DemoCalendar {
       meetings.push(added)
       return added
     },
-    remove: async meeting => {
+    remove: async (meeting, signal) => {
+      signal.throwIfAborted()
       meetings = meetings.filter(kept => kept.id !== meeting.id)
     },
     meetings: () => meetings,

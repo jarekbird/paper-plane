@@ -33,8 +33,8 @@ export function calendarContract(name: string, make: () => Promise<CalendarWorld
       const { calendar, now } = await make()
       const before = await calendar.next(now, live())
       const added = await calendar.add({ title: 'By mistake', start: now + 60_000, end: now + 120_000 }, live())
-      await calendar.remove(added)
-      await calendar.remove(added)
+      await calendar.remove(added, live())
+      await calendar.remove(added, live())
       expect(await calendar.next(now, live())).toEqual(before)
     })
 
@@ -45,6 +45,15 @@ export function calendarContract(name: string, make: () => Promise<CalendarWorld
       gone.abort()
       await expect(calendar.add({ title: 'Too late', start: now + 60_000, end: now + 120_000 }, gone.signal)).rejects.toThrow()
       expect(await calendar.next(now, live())).toEqual(before)
+    })
+
+    it('A4: takes nothing back for a caller that has already gone', async () => {
+      const { calendar, now } = await make()
+      const added = await calendar.add({ title: 'Stays', start: now + 60_000, end: now + 120_000 }, live())
+      const gone = new AbortController()
+      gone.abort()
+      await expect(calendar.remove(added, gone.signal)).rejects.toThrow()
+      expect(await calendar.next(now, live())).toEqual(added)
     })
   })
 }

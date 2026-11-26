@@ -98,7 +98,7 @@ describe('Google Calendar', () => {
     const { calendar, side } = await world()
     const added = await calendar.add({ title: 'Anna', start: NOW + 600_000, end: NOW + 4_200_000 }, live())
     await calendar.next(NOW, live())
-    await calendar.remove(added)
+    await calendar.remove(added, live())
     expect([...new Set(side.asked.map(call => call.host))]).toEqual(['www.googleapis.com'])
   })
 
@@ -107,5 +107,60 @@ describe('Google Calendar', () => {
     life.end()
     await expect(calendar.next(NOW, live())).rejects.toThrow()
     expect(side.asked).toEqual([])
+  })
+
+  const replaced = async (hold: 'the first answer' | 'the answer to the second try') => {
+    const side = googleSide()
+    let kept: string | null = null
+    const place: GooglePlace = { load: async () => kept, save: async next => void (kept = next) }
+    const life = new Lifetime()
+    const waiting: (() => void)[] = []
+    const deletes: (string | null)[] = []
+    const ask: typeof fetch = async (input, init) => {
+      if (init?.method !== 'DELETE') return side.ask(input, init)
+      deletes.push(new Headers(init.headers).get('authorization'))
+      if ((hold === 'the first answer') === (deletes.length === 1)) await new Promise<void>(resolve => waiting.push(resolve))
+      return new Response('{}', { status: 401 })
+    }
+    const account = googleAccount(life, { relay: 'https://relay.example', place, ask: side.ask, now: () => NOW })
+    await account.finish(side.consent(await account.begin()), live())
+    const calendar = calendarOver(life, account, ask)
+    const removing = calendar.remove({ id: 'theirs', title: 'x', start: NOW, end: NOW + 1 }, live()).catch((error: unknown) => error)
+    for (let turn = 0; turn < 200 && waiting.length === 0; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    await account.signOut()
+    await account.finish(side.consent(await account.begin()), live())
+    const fresh = kept
+    const theirs = `Bearer ${(JSON.parse(kept!) as { access: string }).access}`
+    waiting.splice(0).forEach(resolve => resolve())
+    return { outcome: await removing, deletes, theirs, same: () => kept === fresh, account }
+  }
+
+  it.each(['the first answer', 'the answer to the second try'] as const)(
+    'A5: when the user connects another Google account while %s is on its way, asks nothing with the new account’s key and leaves its sign-in alone',
+    async hold => {
+      const { outcome, deletes, theirs, same, account } = await replaced(hold)
+      expect(outcome).toBeInstanceOf(GoogleEnded)
+      expect(deletes).not.toContain(theirs)
+      expect(same()).toBe(true)
+      expect(await account.known()).toBe(true)
+    },
+  )
+
+  it('A4: asks Google to take nothing back for a caller that left while the key was being fetched', async () => {
+    const { calendar, side, account } = await world()
+    const added = await calendar.add({ title: 'Anna', start: NOW + 600_000, end: NOW + 4_200_000 }, live())
+    const token = account.token
+    let release = () => {}
+    account.token = async signal => {
+      await new Promise<void>(resolve => (release = resolve))
+      return token(signal)
+    }
+    const caller = new AbortController()
+    const removing = calendar.remove(added, caller.signal).catch(() => 'left')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    caller.abort()
+    release()
+    expect(await removing).toBe('left')
+    expect(side.asked.filter(call => call.method === 'DELETE')).toEqual([])
   })
 })

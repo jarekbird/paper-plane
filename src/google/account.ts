@@ -14,10 +14,15 @@ export interface GoogleParts {
   now?: () => number
 }
 
+export interface GoogleKey {
+  value: string
+  of: number
+}
+
 export interface GoogleAccount extends CalendarAccount {
-  token(signal: AbortSignal): Promise<string>
-  refused(key: string, signal: AbortSignal): Promise<string>
-  drop(): Promise<void>
+  token(signal: AbortSignal): Promise<GoogleKey>
+  refused(key: GoogleKey, signal: AbortSignal): Promise<GoogleKey>
+  drop(key: GoogleKey): Promise<void>
 }
 
 interface Kept {
@@ -147,17 +152,17 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     token: async signal => {
       const { have, of } = await life.guard(current())
       if (have === null) throw new GoogleEnded()
-      if (have.until - now() > EARLY_MS) return have.access
-      return life.guard(renewed(have, of, signal))
+      if (have.until - now() > EARLY_MS) return { value: have.access, of }
+      return { value: await life.guard(renewed(have, of, signal)), of }
     },
     refused: async (key, signal) => {
       const { have, of } = await life.guard(current())
-      if (have === null) throw new GoogleEnded()
-      if (have.access !== key) return have.access
-      return life.guard(renewed(have, of, signal))
+      if (have === null || of !== key.of) throw new GoogleEnded()
+      if (have.access !== key.value) return { value: have.access, of }
+      return { value: await life.guard(renewed(have, of, signal)), of }
     },
-    drop: async () => {
-      await life.guard(forget(signIn))
+    drop: async key => {
+      await life.guard(forget(key.of))
     },
     signOut: async () => {
       const had = await life.guard(forget(signIn))

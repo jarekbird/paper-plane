@@ -1,5 +1,5 @@
 import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
-import { Agenda } from './agenda.ts'
+import { Agenda, type Diary } from './agenda.ts'
 import { startGlasses, startWaiting, type Hearing } from './glasses/app.ts'
 import type { Display } from './glasses/display.ts'
 import { Inbox } from './inbox.ts'
@@ -49,6 +49,27 @@ export async function startApp(parts: AppParts): Promise<App> {
   const connect = calendars?.own ? new Connect(life, calendars.own.account) : null
   let linked = false
   let shown: { who: Who | null } | null = null
+  let diary: Diary | null = null
+  let diaryLife: Lifetime | null = null
+  const diaryListeners = new Set<() => void>()
+
+  const book = (who: Who | null) => {
+    diaryLife?.end()
+    diaryLife = null
+    diary = null
+    const calendar = linked && calendars?.own ? calendars.own.calendar : who ? undefined : calendars?.sample
+    const told = () => {
+      for (const listener of [...diaryListeners]) listener()
+    }
+    if (calendar) {
+      diaryLife = session.child()
+      const agenda = new Agenda(diaryLife, calendar)
+      diaryLife.own(agenda.onChange(told))
+      diary = { calendar, agenda }
+      void agenda.refresh()
+    }
+    told()
+  }
   const phrases = new Phrases(store)
   await life.guard(phrases.start())
   let session = life.child()
@@ -74,9 +95,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     scope = who ? 'telegram' : 'sample'
     inbox = opened
     shown = { who }
-    const calendar = linked && calendars?.own ? calendars.own.calendar : who ? undefined : calendars?.sample
-    const agenda = calendar ? new Agenda(current, calendar) : undefined
-    if (agenda) void agenda.refresh()
+    book(who)
     const { shell } = startGlasses(current, display, {
       ...(who ? {} : { title: SAMPLE_TITLE }),
       inbox: opened,
@@ -84,7 +103,11 @@ export async function startApp(parts: AppParts): Promise<App> {
       phrases,
       ...(hearing ? { hearing } : {}),
       ...(writer ? { writer } : {}),
-      ...(calendar && agenda ? { calendar, agenda } : {}),
+      diary: () => diary,
+      onDiary: told => {
+        diaryListeners.add(told)
+        return () => void diaryListeners.delete(told)
+      },
     })
     if (ended && !who) shell.notice(ENDED)
     phone?.(current, { inbox: opened, phrases, signIn, connect, note: NOTES[scope], build })
@@ -112,7 +135,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       const now = await life.guard(kept(account))
       if (now === linked) return
       linked = now
-      if (shown) show(shown.who)
+      if (shown) book(shown.who)
     }
     life.own(account.onChange(() => void relink().catch(() => {})))
     void connect?.start()

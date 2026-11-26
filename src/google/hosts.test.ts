@@ -30,7 +30,7 @@ describe('where the Google service connects', () => {
     const calendar = calendarOver(life, account, ask)
     const added = await calendar.add({ title: 'Anna', start: clock + 600_000, end: clock + 4_200_000 }, live)
     await calendar.next(clock, live)
-    await calendar.remove(added)
+    await calendar.remove(added, live)
     clock += 61 * 60_000
     await account.token(live)
     await account.signOut()

@@ -1,6 +1,6 @@
 import type { Lifetime } from 'earshot'
 import type { Calendar, Meeting } from '../messenger.ts'
-import { GoogleEnded, type GoogleAccount } from './account.ts'
+import { GoogleEnded, type GoogleAccount, type GoogleKey } from './account.ts'
 
 const EVENTS = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
 const PAGE = 50
@@ -23,13 +23,17 @@ function meetingOf(event: EventLike): Meeting | null {
 
 export function calendarOver(life: Lifetime, account: GoogleAccount, ask: typeof fetch = fetch): Calendar {
   const call = async (url: string, init: RequestInit, signal: AbortSignal): Promise<Response> => {
-    const asked = (key: string) => ask(url, { ...init, signal, headers: { ...init.headers, authorization: `Bearer ${key}` } })
+    const asked = (key: GoogleKey) => {
+      signal.throwIfAborted()
+      return ask(url, { ...init, signal, headers: { ...init.headers, authorization: `Bearer ${key.value}` } })
+    }
     const key = await life.guard(account.token(signal))
     const first = await life.guard(asked(key))
     if (first.status !== 401) return first
-    const second = await life.guard(asked(await life.guard(account.refused(key, signal))))
+    const renewed = await life.guard(account.refused(key, signal))
+    const second = await life.guard(asked(renewed))
     if (second.status !== 401) return second
-    await life.guard(account.drop())
+    await life.guard(account.drop(renewed))
     throw new GoogleEnded()
   }
 
@@ -70,8 +74,8 @@ export function calendarOver(life: Lifetime, account: GoogleAccount, ask: typeof
       if (typeof made.id !== 'string') throw new Error('The calendar did not take it')
       return { ...meeting, id: made.id }
     },
-    remove: async meeting => {
-      const response = await life.guard(call(`${EVENTS}/${encodeURIComponent(meeting.id)}`, { method: 'DELETE' }, life.signal))
+    remove: async (meeting, signal) => {
+      const response = await life.guard(call(`${EVENTS}/${encodeURIComponent(meeting.id)}`, { method: 'DELETE' }, signal))
       if (!response.ok && response.status !== 404 && response.status !== 410) throw new Error('The calendar did not take it back')
     },
   }

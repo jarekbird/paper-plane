@@ -98,7 +98,7 @@ export interface Meeting {
 export interface Calendar {
   next(from: number, signal: AbortSignal): Promise<Meeting | null>
   add(meeting: Omit<Meeting, 'id'>, signal: AbortSignal): Promise<Meeting>
-  remove(meeting: Meeting): Promise<void>
+  remove(meeting: Meeting, signal: AbortSignal): Promise<void>
 }
 
 export interface CalendarAccount {

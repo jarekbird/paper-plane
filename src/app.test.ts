@@ -333,6 +333,20 @@ describe('the calendar', () => {
     expect(made.app.connect!.view().step).toBe('on')
   })
 
+  it('leaves the user on the screen they are on when Google is connected or disconnected: no reply in the making is lost', async () => {
+    const made = await world({ calendar: 'connected' })
+    made.fake.tap()
+    await settle()
+    made.fake.tap()
+    await settle()
+    expect(made.fake.lines()[0]).toBe('To Anna')
+    await made.app.connect!.disconnect()
+    await settle()
+    expect(made.fake.lines()[0]).toBe('To Anna')
+    await connectGoogle(made.app)
+    expect(made.fake.lines()[0]).toBe('To Anna')
+  })
+
   it('keeps the user where their chats are when Google is connected: the same account, its picks kept', async () => {
     const made = await world({ signedIn: true, calendar: 'not connected' })
     await made.app.inbox()!.pick(['anna'])

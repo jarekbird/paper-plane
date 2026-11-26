@@ -1,6 +1,11 @@
 import { LifetimeEnded, type Lifetime } from 'earshot'
 import type { Calendar, Meeting } from './messenger.ts'
 
+export interface Diary {
+  calendar: Calendar
+  agenda: Agenda
+}
+
 export const AGENDA_MS = 300_000
 const SOON_MS = 60_000
 

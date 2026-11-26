@@ -21,13 +21,14 @@ interface Options {
   picks?: string[]
   wrap?: (calendar: Calendar) => Calendar
   model?: NavigatorModel
+  clock?: () => number
 }
 
 async function world(options: Options = {}) {
   const life = new Lifetime()
   const fake = fakeBridge()
   const store = createStore([memoryPlace()])
-  const messenger = demoMessenger(() => NOW)
+  const messenger = demoMessenger(() => options.clock?.() ?? NOW)
   const inbox = new Inbox(life, messenger, store)
   await inbox.start()
   await inbox.pick(options.picks ?? ['anna', 'sam'])
@@ -35,14 +36,27 @@ async function world(options: Options = {}) {
   const calendar = options.calendar === false ? undefined : (options.wrap?.(sample) ?? sample)
   const agenda = calendar ? new Agenda(life, calendar) : undefined
   await agenda?.refresh()
+  const gone = { calendar: false }
+  const diaryListeners = new Set<() => void>()
+  const disconnect = () => {
+    gone.calendar = true
+    for (const told of [...diaryListeners]) told()
+  }
   const app = startGlasses(life, display(life, fake.bridge), {
     inbox,
     messenger,
     phrases: new Phrases(store),
     hearing: { transcribe: scriptedSpeech(options.said ?? []), ...(options.model ? { model: options.model } : {}) },
     ...(options.sampleChats ? { title: 'Sample chats' } : {}),
-    ...(calendar ? { calendar } : {}),
-    ...(agenda ? { agenda } : {}),
+    diary: () => (calendar && agenda && !gone.calendar ? { calendar, agenda } : null),
+    onDiary: told => {
+      const stopAgenda = agenda?.onChange(told)
+      diaryListeners.add(told)
+      return () => {
+        stopAgenda?.()
+        diaryListeners.delete(told)
+      }
+    },
   })
   await settle()
   const say = async () => {
@@ -61,7 +75,7 @@ async function world(options: Options = {}) {
   const sent = () => messenger.sent().map(message => [message.chat, message.text])
   const meetings = () =>
     sample.meetings().map(meeting => [meeting.title, new Date(meeting.start).getHours(), new Date(meeting.start).getMinutes()])
-  return { ...app, life, fake, messenger, sample, agenda, say, tap, menu, sent, meetings }
+  return { ...app, life, fake, messenger, sample, agenda, say, tap, menu, sent, meetings, disconnect }
 }
 
 beforeEach(() => {
@@ -85,7 +99,7 @@ describe('the next meeting, on the list of chats', () => {
 
   it('names the day when it is not today', async () => {
     const { fake, sample, agenda } = await world()
-    await sample.remove(sample.meetings()[0])
+    await sample.remove(sample.meetings()[0], new AbortController().signal)
     await sample.add({ title: 'Standup', start: NOW + 24 * 3_600_000, end: NOW + 25 * 3_600_000 }, new AbortController().signal)
     await agenda!.refresh()
     await settle()
@@ -131,7 +145,7 @@ describe('the next meeting, on the list of chats', () => {
 
   it('goes back to the app’s name when the calendar has nothing ahead', async () => {
     const { fake, sample, agenda } = await world()
-    await sample.remove(sample.meetings()[0])
+    await sample.remove(sample.meetings()[0], new AbortController().signal)
     await agenda!.refresh()
     await settle()
     expect(fake.lines()[0]).toBe('Paper Plane')
@@ -286,5 +300,77 @@ describe('a reply to a message that names a time', () => {
     fake.pick('Send and add')
     await settle()
     expect(meetings().at(-1)).toEqual(['Launch crew', 16, 0])
+  })
+
+  it('counts "tomorrow" from the day the message was sent, not from the day it is answered', async () => {
+    let clock = NOW - 24 * 3_600_000
+    const { fake, messenger, say } = await world({ said: ['See you there'], picks: ['sam'], clock: () => clock })
+    messenger.arrive('sam', 'Sam', 'Tomorrow at noon?')
+    clock = NOW
+    await settle()
+    fake.tap()
+    await settle()
+    await say()
+    expect(fake.lines().at(-2)).toBe('Calendar: Today 12 to 1 PM, Sam')
+  })
+
+  it('offers no meeting for a time that has passed since the message was sent', async () => {
+    let clock = NOW - 24 * 3_600_000
+    const { fake, messenger, say, menu } = await world({ said: ['Sorry I missed it'], picks: ['sam'], clock: () => clock })
+    messenger.arrive('sam', 'Sam', 'Call me at 4')
+    clock = NOW
+    await settle()
+    fake.tap()
+    await settle()
+    await say()
+    expect(fake.lines()).toEqual(['To Sam', 'Sorry I missed it', 'Tap to send'])
+    expect(menu()).not.toContain('Send and add')
+  })
+
+  it('keeps a reply that was waiting for its tap when the calendar is disconnected, and then sends it without a meeting', async () => {
+    const { fake, tap, say, menu, sent, meetings, disconnect } = await world({ said: ['See you there'] })
+    await tap()
+    await say()
+    disconnect()
+    await settle()
+    expect(fake.lines().slice(0, 2)).toEqual(['To Anna', 'See you there'])
+    expect(menu()).not.toContain('Send and add')
+    await tap()
+    expect(sent()).toEqual([['anna', 'See you there']])
+    expect(meetings()).toHaveLength(1)
+  })
+
+  it('takes the next meeting off the top line when the calendar is disconnected, without leaving the screen', async () => {
+    const { fake, tap, disconnect } = await world()
+    await tap()
+    disconnect()
+    await settle()
+    expect(fake.lines()[0]).toBe('Anna')
+    fake.double()
+    await settle()
+    expect(fake.lines()[0]).toBe('Paper Plane')
+  })
+
+  it('A4: takes no meeting back once the chat was left, though the message is already taken back', async () => {
+    let removing = 0
+    const { fake, tap, say, life } = await world({
+      said: ['See you there'],
+      wrap: calendar => ({
+        ...calendar,
+        remove: async (meeting, signal) => {
+          removing++
+          signal.throwIfAborted()
+          return calendar.remove(meeting, signal)
+        },
+      }),
+    })
+    await tap()
+    await say()
+    fake.pick('Send and add')
+    await settle()
+    life.end()
+    fake.tap()
+    await settle()
+    expect(removing).toBe(0)
   })
 })
