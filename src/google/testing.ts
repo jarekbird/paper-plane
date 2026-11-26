@@ -6,6 +6,7 @@ export interface GoogleSide {
   forget(): void
   expire(): void
   down(is: boolean): void
+  deaf(is: boolean): void
   put(event: Record<string, unknown>): void
   events(): Record<string, unknown>[]
   revoked: string[]
@@ -26,6 +27,7 @@ export function googleSide(): GoogleSide {
   let access = ''
   let events: Record<string, unknown>[] = []
   let unreachable = false
+  let unheard = false
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   const issue = () => (access = `access-${++serial}`)
@@ -55,6 +57,7 @@ export function googleSide(): GoogleSide {
       return json(200, { access: issue(), expires: 3600 })
     }
     if (url.host === 'oauth2.googleapis.com' && url.pathname === '/revoke') {
+      if (unheard) throw new Error('offline')
       revoked.push(new URLSearchParams(text).get('token') ?? '')
       refresh = null
       access = ''
@@ -102,6 +105,9 @@ export function googleSide(): GoogleSide {
     },
     down: is => {
       unreachable = is
+    },
+    deaf: is => {
+      unheard = is
     },
     expire: () => {
       access = ''

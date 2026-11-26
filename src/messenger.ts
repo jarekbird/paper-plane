@@ -105,6 +105,6 @@ export interface CalendarAccount {
   known(): Promise<boolean>
   begin(): Promise<string>
   finish(code: string, signal: AbortSignal): Promise<boolean>
-  signOut(): Promise<void>
+  signOut(): Promise<'ended' | 'here'>
   onChange(told: () => void): () => void
 }

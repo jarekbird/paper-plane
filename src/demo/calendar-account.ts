@@ -26,9 +26,10 @@ export function demoCalendarAccount(session: { connected: boolean }): CalendarAc
       return true
     },
     signOut: async () => {
-      if (!session.connected) return
+      if (!session.connected) return 'ended'
       session.connected = false
       tell()
+      return 'ended'
     },
     onChange: told => {
       listeners.add(told)

@@ -75,7 +75,7 @@ export function calendarAccountContract(name: string, make: () => Promise<Calend
       await connect(world)
       let told = 0
       const stop = world.account.onChange(() => told++)
-      await world.account.signOut()
+      expect(await world.account.signOut()).toBe('ended')
       expect(await world.account.known()).toBe(false)
       expect(told).toBe(1)
       stop()

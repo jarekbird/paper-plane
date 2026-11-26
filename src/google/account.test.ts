@@ -398,4 +398,88 @@ describe('the Google sign-in on the phone', () => {
     expect(account.signIn()).not.toBe(before)
     await expect(account.token(before, live())).rejects.toBeInstanceOf(GoogleEnded)
   })
+
+  const twoCopies = () => {
+    const side = googleSide()
+    const even = memoryPlace()
+    const web = memoryPlace()
+    const works = { evenReads: true, webWrites: true }
+    const { google } = storeOver([
+      {
+        read: key => (works.evenReads ? even.read(key) : Promise.reject(new Error('unreadable'))),
+        write: (key, text) => even.write(key, text),
+      },
+      {
+        read: key => web.read(key),
+        write: (key, text) => (works.webWrites ? web.write(key, text) : Promise.reject(new Error('unwritable'))),
+      },
+    ])
+    const make = () =>
+      googleAccount(new Lifetime(), { relay: 'https://relay.example', place: google, ask: side.ask, now: () => 1_800_000_000_000 })
+    return { side, works, make }
+  }
+
+  it('S3: does not call a disconnect complete when one copy on the phone could not be removed and Google could not be told', async () => {
+    const { side, works, make } = twoCopies()
+    const account = make()
+    await account.finish(side.consent(await account.begin()), live())
+    works.webWrites = false
+    side.deaf(true)
+    expect(await account.signOut()).toBe('here')
+    expect(await account.known()).toBe(false)
+  })
+
+  it('S3: calls a disconnect complete when a copy could not be removed but Google ended the sign-in, so the copy is of no use', async () => {
+    const { side, works, make } = twoCopies()
+    const account = make()
+    await account.finish(side.consent(await account.begin()), live())
+    works.webWrites = false
+    expect(await account.signOut()).toBe('ended')
+    expect(side.revoked).toHaveLength(1)
+    works.evenReads = false
+    const later = make()
+    const stale = await later.token(later.signIn(), live())
+    await expect(later.refused(stale, live())).rejects.toThrow()
+    expect(side.asked.at(-1)).toMatchObject({ path: '/google/refresh' })
+  })
+
+  it('A5: ends the sign-in it picked up at Google when the phone’s store cannot even be read before it is kept', async () => {
+    const made = world()
+    const code = made.side.consent(await made.account.begin())
+    const load = made.place.load
+    made.place.load = async () => {
+      throw new Error('unreadable')
+    }
+    let told = 0
+    made.account.onChange(() => told++)
+    await expect(made.account.finish(code, live())).rejects.toThrow()
+    made.place.load = load
+    expect(made.side.revoked).toHaveLength(1)
+    expect(told).toBe(0)
+    expect(await made.account.known()).toBe(false)
+  })
+
+  it('A5: never calls a cancelled connect connected, also when the phone could not be put back: Google ends that sign-in and nobody is told', async () => {
+    const made = world()
+    const code = made.side.consent(await made.account.begin())
+    const save = made.place.save
+    let release: (() => void) | null = null
+    made.place.save = async next => {
+      if (next === null) throw new Error('the store is full')
+      if (release === null) await new Promise<void>(resolve => (release = resolve))
+      return save(next)
+    }
+    let told = 0
+    made.account.onChange(() => told++)
+    const before = made.account.signIn()
+    const leaving = new AbortController()
+    const finishing = made.account.finish(code, leaving.signal).catch(() => 'left')
+    await until(() => release !== null)
+    leaving.abort()
+    release!()
+    expect(await finishing).toBe('left')
+    expect(told).toBe(0)
+    expect(made.account.signIn()).toBe(before)
+    expect(made.side.revoked).toHaveLength(1)
+  })
 })

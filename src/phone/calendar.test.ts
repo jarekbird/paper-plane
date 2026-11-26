@@ -93,4 +93,37 @@ describe('connecting Google Calendar on the phone', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(told).toBe(0)
   })
+
+  it('says so, and stays connected, when the phone could not disconnect', async () => {
+    const { connect } = world({
+      connected: true,
+      wrap: account => ({
+        ...account,
+        signOut: async () => {
+          throw new Error('the store is full')
+        },
+      }),
+    })
+    await connect.start()
+    await connect.disconnect()
+    expect(connect.view()).toMatchObject({ step: 'on', busy: false })
+    expect(connect.view().problem).toMatch(/Could not disconnect/)
+  })
+
+  it('says what is left to do when the calendar is off this phone but the sign-in could not be ended everywhere', async () => {
+    const { connect } = world({
+      connected: true,
+      wrap: account => ({
+        ...account,
+        signOut: async () => {
+          await account.signOut()
+          return 'here'
+        },
+      }),
+    })
+    await connect.start()
+    await connect.disconnect()
+    expect(connect.view().step).toBe('off')
+    expect(connect.view().problem).toMatch(/End it in your Google account/)
+  })
 })

@@ -12,6 +12,9 @@ export interface ConnectView {
 
 const WRONG_CODE = 'That code is not right, or it is more than five minutes old. Start again.'
 const NOT_REACHED = 'Could not reach the relay. Try again.'
+const NOT_DISCONNECTED = 'Could not disconnect on this phone. Try again.'
+const DISCONNECTED_HERE =
+  'Disconnected on this phone, but the sign-in could not be fully removed and Google could not be told. End it in your Google account, under Security, Third-party access.'
 
 export class Connect {
   readonly #life: Lifetime
@@ -82,12 +85,15 @@ export class Connect {
     if (this.#view.step !== 'on' || this.#view.busy) return
     const life = this.#life
     const attempt = this.#busy()
+    let left: 'ended' | 'here'
     try {
-      await life.guard(this.#account.signOut())
+      left = await life.guard(this.#account.signOut())
     } catch (error) {
-      if (error instanceof LifetimeEnded) return
+      if (!(error instanceof LifetimeEnded) && !attempt.signal.aborted) this.#show({ step: 'on', problem: NOT_DISCONNECTED })
+      return
     }
-    if (!attempt.signal.aborted) await life.guard(this.start())
+    if (attempt.signal.aborted) return
+    this.#show({ step: 'off', problem: left === 'here' ? DISCONNECTED_HERE : null })
   }
 
   #busy(): AbortController {

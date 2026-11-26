@@ -104,8 +104,15 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     return had
   }
 
-  const revoke = (refresh: string) =>
-    ask(REVOKE, { method: 'POST', body: new URLSearchParams({ token: refresh }), signal: life.signal }).catch(() => null)
+  const revoke = async (refresh: string): Promise<boolean> => {
+    try {
+      const answer = await life.guard(ask(REVOKE, { method: 'POST', body: new URLSearchParams({ token: refresh }), signal: life.signal }))
+      return answer.ok
+    } catch (error) {
+      if (error instanceof LifetimeEnded) throw error
+      return false
+    }
+  }
 
   const renew = async (have: Kept, of: number, signal: AbortSignal): Promise<string> => {
     const response = await life.guard(post('/google/refresh', { refresh: have.refresh }, signal))
@@ -164,17 +171,28 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       const { refresh, access } = given
       if (typeof refresh !== 'string' || typeof access !== 'string') throw new Error('The sign-in could not be picked up')
       if (verifier === secret) verifier = null
-      const kept = await life.guard(
-        inTurn(async () => {
-          if (signal.aborted) return 'left'
-          const before = await life.guard(place.load())
-          const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
-          if (!(await life.guard(stored(next)))) return 'unkept'
-          if (signal.aborted && (await life.guard(stored(before)))) return 'left'
-          signIn++
-          return 'kept'
-        }),
-      )
+      const write = async (): Promise<'kept' | 'left' | 'unkept'> => {
+        try {
+          return await life.guard(
+            inTurn(async (): Promise<'kept' | 'left' | 'unkept'> => {
+              if (signal.aborted) return 'left'
+              const before = await life.guard(place.load())
+              const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
+              if (!(await life.guard(stored(next)))) return 'unkept'
+              if (signal.aborted) {
+                await life.guard(stored(before))
+                return 'left'
+              }
+              signIn++
+              return 'kept'
+            }),
+          )
+        } catch (error) {
+          if (error instanceof LifetimeEnded) throw error
+          return 'unkept'
+        }
+      }
+      const kept = await life.guard(write())
       if (kept === 'kept') {
         tell()
         return true
@@ -200,8 +218,26 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       await life.guard(forget(key.of))
     },
     signOut: async () => {
-      const had = await life.guard(forget(signIn))
-      if (had !== null) await life.guard(revoke(had.refresh))
+      const left = await life.guard(
+        inTurn(async () => {
+          const have = parsed(await life.guard(place.load()))
+          let everywhere = true
+          try {
+            await life.guard(place.save(null))
+          } catch (error) {
+            if (error instanceof LifetimeEnded) throw error
+            everywhere = false
+          }
+          if (!everywhere && !(await life.guard(holds(null)))) return null
+          if (have) signIn++
+          return { have, everywhere }
+        }),
+      )
+      if (left === null) throw new Error('The sign-in could not be removed from this phone')
+      if (left.have === null) return 'ended'
+      tell()
+      const told = await life.guard(revoke(left.have.refresh))
+      return left.everywhere || told ? 'ended' : 'here'
     },
     onChange: told => {
       listeners.add(told)
