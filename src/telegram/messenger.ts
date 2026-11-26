@@ -1,11 +1,12 @@
 import { TroubleError, type Chat, type Messenger } from '../messenger.ts'
-import { signedOut, troubleOf, type Within } from './trouble.ts'
+import { sentBefore, signedOut, troubleOf, type Within } from './trouble.ts'
 import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type MessageLike, type SponsoredLike } from './map.ts'
 
-export interface ClientLike {
+export interface ClientLike<Id> {
   iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<DialogLike>
   getHistory(chat: number, params: { limit: number }): Promise<MessageLike[]>
-  sendText(chat: number, text: string, params: { abortSignal: AbortSignal }): Promise<MessageLike>
+  randomId(): Id
+  sendText(chat: number, text: string, params: { abortSignal: AbortSignal; randomId: Id }): Promise<MessageLike>
   readHistory(chat: number): Promise<void>
   deleteMessagesById(chat: number, ids: number[], params: { revoke: boolean }): Promise<void>
   getPeerDialogs(chat: number): Promise<(DialogLike | null)[]>
@@ -38,13 +39,15 @@ export interface Asking {
 }
 
 const DIALOGS = 100
+const RECENT = 30
 const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'history_read'])
 export const GRACE_MS = 3_000
 
-export function messengerOver(client: ClientLike, { within, session, now = Date.now }: Asking): Messenger & { close(): void } {
+export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now = Date.now }: Asking): Messenger & { close(): void } {
   const listeners = new Set<() => void>()
   const keeping = new Map<string, Promise<boolean>>()
   const ads = new Map<string, Uint8Array>()
+  const tried = new WeakMap<object, Id>()
   let downSince: number | null = null
   let unanswered = false
   const changed = () => {
@@ -99,10 +102,23 @@ export function messengerOver(client: ClientLike, { within, session, now = Date.
         .map(toMessage)
         .reverse()
     },
-    send: async (chat, text) => {
-      const sent = toMessage(await ask(abortSignal => client.sendText(Number(chat), text, { abortSignal })))
+    send: async (chat, text, attempt) => {
+      const kept = attempt ? tried.get(attempt) : undefined
+      const randomId = kept ?? client.randomId()
+      if (attempt) tried.set(attempt, randomId)
+      let sent: MessageLike | undefined
+      try {
+        sent = await ask(abortSignal => client.sendText(Number(chat), text, { abortSignal, randomId }))
+      } catch (error) {
+        if (kept === undefined || !sentBefore(error)) throw error
+        const recent = await ask(() => client.getHistory(Number(chat), { limit: RECENT }))
+        sent = recent.find(message => message.isOutgoing && message.text === text)
+        if (attempt) tried.delete(attempt)
+        if (!sent) throw error
+      }
+      if (attempt) tried.delete(attempt)
       changed()
-      return sent
+      return toMessage(sent)
     },
     read: async chat => {
       await ask(() => client.readHistory(Number(chat)))

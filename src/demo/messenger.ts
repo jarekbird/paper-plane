@@ -65,6 +65,7 @@ export interface DemoMessenger extends Messenger {
   seenSponsored(): readonly string[]
   drafts(): ReadonlyMap<string, string>
   trouble(next: Trouble | null): void
+  loseAnswer(): void
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
@@ -74,7 +75,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const kept: Message[] = []
   const seenAds: string[] = []
   const drafts = new Map<string, string>()
+  const unanswered = new WeakMap<object, Message>()
   let trouble: Trouble | null = null
+  let losing = false
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
     chat,
@@ -120,14 +123,22 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       reach()
       return find(id).messages.slice(-limit)
     },
-    send: async (id, text) => {
+    send: async (id, text, attempt) => {
       reach()
+      const before = attempt && unanswered.get(attempt)
+      if (attempt && before) {
+        unanswered.delete(attempt)
+        return before
+      }
       const chat = find(id)
       const sent = message(id, 'You', text, now())
       chat.messages.push(sent)
       outbox.push(sent)
       tell()
-      return sent
+      if (!losing) return sent
+      losing = false
+      if (attempt) unanswered.set(attempt, sent)
+      throw new TroubleError({ kind: 'unreachable' })
     },
     read: async id => {
       reach()
@@ -198,6 +209,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     sent: () => outbox,
     saved: () => kept,
     drafts: () => drafts,
+    loseAnswer: () => {
+      losing = true
+    },
     trouble: next => {
       trouble = next
       tell()

@@ -9,6 +9,7 @@ export interface ContractWorld {
   saved(): Promise<string[]>
   sponsoredSeen(): Promise<number>
   trouble(next: Trouble | null): Promise<void>
+  loseAnswer(): Promise<void>
 }
 
 const troubleIn = async (work: Promise<unknown>) => {
@@ -171,6 +172,24 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       await trouble(null)
       expect(told).toBeGreaterThan(0)
       stop()
+    })
+
+    it('S5: delivers a message once when Telegram took it, its answer was lost, and the same attempt is made again', async () => {
+      const { messenger, chat, loseAnswer } = await make()
+      const attempt = {}
+      await loseAnswer()
+      await expect(messenger.send(chat, 'Only once', attempt)).rejects.toThrow()
+      const sent = await messenger.send(chat, 'Only once', attempt)
+      expect(sent).toMatchObject({ chat, text: 'Only once', mine: true })
+      const arrived = (await messenger.history(chat, 10)).filter(message => message.text === 'Only once')
+      expect(arrived.map(message => message.id)).toEqual([sent.id])
+    })
+
+    it('sends the same words again when they are a new attempt', async () => {
+      const { messenger, chat } = await make()
+      await messenger.send(chat, 'Twice on purpose', {})
+      await messenger.send(chat, 'Twice on purpose', {})
+      expect((await messenger.history(chat, 10)).filter(message => message.text === 'Twice on purpose')).toHaveLength(2)
     })
   })
 }

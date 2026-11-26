@@ -461,4 +461,69 @@ describe('the Telegram account', () => {
       vi.useRealTimers()
     }
   })
+
+  it('A4: asks Telegram nothing more for a launch once the app has ended', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = made.side.client()
+    let imported = () => {}
+    let asked = 0
+    const getMe = next.getMe
+    next.importSession = () => new Promise<void>(resolve => (imported = resolve))
+    next.getMe = async () => {
+      asked++
+      return getMe()
+    }
+    const life = new Lifetime()
+    const restoring = accountOver(life, next, made.place)
+      .restore()
+      .catch(() => 'ended')
+    await turn()
+    life.end()
+    imported()
+    expect(await restoring).toBe('ended')
+    await turn()
+    expect(asked).toBe(0)
+    expect(next.loops).toBe(0)
+  })
+
+  it('S3: keeps trying to remove an ended sign-in the phone could not forget, and does not count it as a sign-in meanwhile', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.side.revokeAll()
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toMatch(/^session-/)
+    expect(await made.account.known()).toBe(false)
+    expect(await made.account.restore()).toBeNull()
+    made.place.save = save
+    expect(await made.account.known()).toBe(false)
+    expect(made.saved()).toBeNull()
+  })
+
+  it('keeps a new sign-in made while the ended one could not be removed', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    made.account.ended(made.account.era())
+    await turn()
+    made.place.save = save
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    expect(await made.account.known()).toBe(true)
+    expect(made.saved()).toMatch(/^session-/)
+  })
 })

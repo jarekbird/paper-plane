@@ -16,6 +16,8 @@ export const ANSWER_MS = 15_000
 
 export type Within = <T>(work: (signal: AbortSignal) => Promise<T>) => Promise<T>
 
+export const sentBefore = (error: unknown): boolean => tl.RpcError.is(error, 'RANDOM_ID_DUPLICATE')
+
 export const signedOut = (error: unknown): boolean => SIGNED_OUT.some(code => tl.RpcError.is(error, code))
 
 export function troubleOf(error: unknown): Trouble | null {
@@ -28,6 +30,7 @@ export function answerWithin(life: Lifetime, ms: number): Within {
   return async work => {
     const limit = new AbortController()
     let timer: Timer | undefined
+    const leave = life.own(() => limit.abort())
     const late = new Promise<never>((_, reject) => {
       timer = life.timeout(() => {
         reject(new TroubleError({ kind: 'unreachable' }))
@@ -38,6 +41,7 @@ export function answerWithin(life: Lifetime, ms: number): Within {
       return await life.guard(Promise.race([work(limit.signal), late]))
     } finally {
       timer?.cancel()
+      leave()
     }
   }
 }

@@ -49,6 +49,12 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   let pending: { phone: string; hash: string } | null = null
   let era = 0
   let inside = false
+  let stale = false
+
+  const forgotten = async (): Promise<boolean> => {
+    if (stale) stale = !(await life.guard(done(() => place.save(null))))
+    return !stale
+  }
 
   const enter = (user: UserLike): Who => {
     era++
@@ -61,7 +67,8 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     const mine = ++era
     inside = false
     pending = null
-    await life.guard(done(() => place.save(null)))
+    stale = true
+    await life.guard(forgotten())
     await life.guard(done(() => client.drop()))
     if (era === mine) for (const told of [...listeners]) told()
   }
@@ -92,6 +99,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
         if (!signal.aborted) {
           await life.guard(place.save(session))
           stored = true
+          stale = false
         }
         if (!signal.aborted) await life.guard(client.startUpdatesLoop())
       }
@@ -110,22 +118,16 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   }
 
   return {
-    known: async () => (await life.guard(place.load())) !== null,
+    known: async () => (await life.guard(forgotten())) && (await life.guard(place.load())) !== null,
     restore: async () => {
+      if (!(await life.guard(forgotten()))) return null
       const saved = await life.guard(place.load())
       if (saved === null) return null
       let me: UserLike
       try {
-        me = await life.guard(
-          within(async signal => {
-            await client.importSession(saved, true)
-            signal.throwIfAborted()
-            const user = await client.getMe()
-            signal.throwIfAborted()
-            await client.startUpdatesLoop()
-            return user
-          }),
-        )
+        await life.guard(within(() => client.importSession(saved, true)))
+        me = await life.guard(within(() => client.getMe()))
+        await life.guard(within(() => client.startUpdatesLoop()))
       } catch (error) {
         if (!signedOut(error)) throw error
         await life.guard(place.save(null))

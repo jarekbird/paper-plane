@@ -2,6 +2,7 @@ import { createStore, Lifetime, memoryPlace, SAMPLE_RATE, scriptedSpeech } from 
 import { fakeBridge } from 'earshot/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoMessenger } from '../demo/messenger.ts'
+import { demoWriter } from '../demo/writer.ts'
 import { Inbox } from '../inbox.ts'
 import { TroubleError, type Trouble } from '../messenger.ts'
 import { Phrases } from '../phrases.ts'
@@ -21,7 +22,7 @@ const ANNA = [
   'Tap to reply',
 ]
 
-async function world(said: string[] = []) {
+async function world(said: string[] = [], writes = false) {
   const life = new Lifetime()
   const fake = fakeBridge()
   const store = createStore([memoryPlace()])
@@ -34,6 +35,7 @@ async function world(said: string[] = []) {
     messenger,
     phrases: new Phrases(store),
     hearing: { transcribe: scriptedSpeech(said) },
+    ...(writes ? { writer: demoWriter() } : {}),
   })
   await settle()
   const say = async () => {
@@ -101,6 +103,31 @@ describe('a chat, when Telegram is in trouble', () => {
   })
 })
 
+describe('marking all read, when Telegram is in trouble', () => {
+  const failing = async (said: string[] = []) => {
+    const made = await world(said)
+    made.messenger.read = async () => {
+      throw new TroubleError(UNREACHABLE)
+    }
+    return made
+  }
+
+  it('says why it did not work when it is chosen from the menu', async () => {
+    const { fake } = await failing()
+    fake.pick('Mark all read')
+    await settle()
+    expect(fake.overlay()).toBe('Cannot reach Telegram')
+  })
+
+  it('A7: says the same when it is said and confirmed by a tap', async () => {
+    const { fake, say, tap } = await failing(['mark all read'])
+    await say()
+    expect(fake.overlay()).toContain('Tap to confirm')
+    await tap()
+    expect(fake.overlay()).toBe('Cannot reach Telegram')
+  })
+})
+
 describe('a reply, when Telegram is in trouble', () => {
   it('S5: is not sent while Telegram cannot be reached, says why, stays on screen, and goes out once by a tap when it can', async () => {
     const { fake, messenger, tap, say, sent } = await world(['See you at noon'])
@@ -146,5 +173,52 @@ describe('a reply, when Telegram is in trouble', () => {
     await tap()
     expect(fake.overlay()).toBe('')
     expect(fake.lines()).toEqual(['To Anna', 'See you at noon', 'Not sent. Tap to try again'])
+  })
+
+  it('S5: arrives once when Telegram took it, the answer was lost, and the user taps to try again', async () => {
+    const { fake, messenger, tap, say, sent } = await world(['See you at noon'])
+    await tap()
+    await say()
+    messenger.loseAnswer()
+    await tap()
+    expect(fake.overlay()).toBe('Cannot reach Telegram')
+    await settle(5_000)
+    expect(fake.lines()).toEqual(['To Anna', 'See you at noon', 'Not sent. Tap to try again'])
+    await tap()
+    expect(fake.lines().at(-1)).toBe('Sent. Tap to undo')
+    expect(sent()).toEqual([['anna', 'See you at noon']])
+    expect((await messenger.history('anna', 10)).filter(message => message.text === 'See you at noon')).toHaveLength(1)
+  })
+
+  it('S5: a short answer arrives once too, when its answer was lost and the user picks it again', async () => {
+    const { fake, messenger, tap, sent } = await world()
+    await tap()
+    await tap()
+    messenger.loseAnswer()
+    await tap()
+    expect(fake.overlay()).toBe('Cannot reach Telegram')
+    await settle(5_000)
+    await tap()
+    await settle()
+    expect(sent()).toHaveLength(1)
+  })
+
+  it('S5: sends other words as a new message, never as the one whose answer was lost', async () => {
+    const { fake, messenger, tap, say, sent } = await world(['tell her see you at noon'], true)
+    await tap()
+    await say()
+    await settle(1_000)
+    const written = fake.lines()[1]
+    messenger.loseAnswer()
+    await tap()
+    await settle(5_000)
+    fake.pick('As I said it')
+    await settle()
+    expect(fake.lines()[1]).toBe('tell her see you at noon')
+    await tap()
+    expect(sent()).toEqual([
+      ['anna', written],
+      ['anna', 'tell her see you at noon'],
+    ])
   })
 })

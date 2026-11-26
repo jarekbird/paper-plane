@@ -34,6 +34,9 @@ function fakeClient() {
   const links = new Set<(state: LinkState) => void>()
   const asked: string[] = []
   const ended: number[] = []
+  const used = new Set<number>()
+  let ids = 0
+  let losing = false
   let refused: Error | null = null
   let since = 0
   let era = 0
@@ -58,7 +61,7 @@ function fakeClient() {
   add(peers[1], peers[1], 'Build is green.')
   add(peers[1], peers[1], 'Cy joined', true)
 
-  const client: ClientLike = {
+  const client: ClientLike<number> = {
     iterDialogs: async function* () {
       const dialogs: DialogLike[] = peers.map(entry => ({
         peer: entry,
@@ -69,7 +72,15 @@ function fakeClient() {
       yield* dialogs.sort((a, b) => (b.lastMessage?.date.getTime() ?? 0) - (a.lastMessage?.date.getTime() ?? 0))
     },
     getHistory: async (chat, { limit }) => of(chat).reverse().slice(0, limit),
-    sendText: async (chat, text) => add(peer(chat), me, text),
+    randomId: () => ++ids,
+    sendText: async (chat, text, { randomId }) => {
+      if (used.has(randomId)) throw Object.assign(new tl.RpcError(500, 'RANDOM_ID_DUPLICATE'), {})
+      used.add(randomId)
+      const sent = add(peer(chat), me, text)
+      if (!losing) return sent
+      losing = false
+      throw new Error('the connection closed before the answer')
+    },
     readHistory: async chat => void unread.set(chat, 0),
     deleteMessagesById: async (chat, ids) => {
       for (const id of ids) {
@@ -101,7 +112,7 @@ function fakeClient() {
       return call(...args)
     }) as (...args: A) => Promise<R>
   const dialogs = client.iterDialogs
-  const guarded: ClientLike = {
+  const guarded: ClientLike<number> = {
     ...client,
     iterDialogs: async function* (params) {
       asked.push('iterDialogs')
@@ -135,6 +146,7 @@ function fakeClient() {
     asked,
     ended,
     refuse: (error: Error | null) => void (refused = error),
+    loseAnswer: () => void (losing = true),
     later: (ms: number) => void (since += ms),
     signedInAgain: () => void era++,
     listening: () => listeners.size + links.size,
@@ -160,6 +172,7 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
         fake.later(GRACE_MS)
       } else fake.link('connected')
     },
+    loseAnswer: async () => fake.loseAnswer(),
   }
 })
 
@@ -252,6 +265,22 @@ describe('the Telegram adapter, when Telegram is in trouble', () => {
     }
   })
 
+  it('A4: takes a message that is still being sent out of the line when the app ends', async () => {
+    const fake = fakeClient()
+    let given: AbortSignal | undefined
+    fake.client.sendText = (_chat, _text, { abortSignal }) => {
+      given = abortSignal
+      return new Promise(() => {})
+    }
+    void messengerOver(fake.client, fake.asking)
+      .send('42', 'Closing')
+      .catch(() => {})
+    await Promise.resolve()
+    expect(given?.aborted).toBe(false)
+    fake.life.end()
+    expect(given?.aborted).toBe(true)
+  })
+
   it('A4: leaves no timer behind for a call that was answered', async () => {
     const fake = fakeClient()
     const before = fake.life.owned
@@ -342,5 +371,47 @@ describe('the Telegram adapter, when Telegram is in trouble', () => {
       .catch((thrown: unknown) => thrown)
     expect((error as Error).message).toBe('wait')
     expect((error as Error).cause).toBeUndefined()
+  })
+
+  it('S5: gives a message one identity for every try of one attempt, and a new one for a new attempt', async () => {
+    const fake = fakeClient()
+    const given: number[] = []
+    fake.client.sendText = async (_chat, _text, { randomId }) => {
+      given.push(randomId)
+      throw new Error('no answer')
+    }
+    const messenger = messengerOver(fake.client, fake.asking)
+    const attempt = {}
+    await messenger.send('42', 'Hello', attempt).catch(() => {})
+    await messenger.send('42', 'Hello', attempt).catch(() => {})
+    await messenger.send('42', 'Hello', {}).catch(() => {})
+    await messenger.send('42', 'Hello').catch(() => {})
+    expect(given[1]).toBe(given[0])
+    expect(new Set(given).size).toBe(3)
+  })
+
+  it('S5: does not call a message sent when Telegram says it has it but it is not among the newest, and lets the next try go out afresh', async () => {
+    const fake = fakeClient()
+    const given: number[] = []
+    fake.client.sendText = async (_chat, _text, { randomId }) => {
+      given.push(randomId)
+      throw refusal('RANDOM_ID_DUPLICATE')
+    }
+    const messenger = messengerOver(fake.client, fake.asking)
+    const attempt = {}
+    await messenger.send('42', 'Lost', attempt).catch(() => {})
+    expect(await failure(messenger.send('42', 'Lost', attempt))).toBeInstanceOf(tl.RpcError)
+    await messenger.send('42', 'Lost', attempt).catch(() => {})
+    expect(given[1]).toBe(given[0])
+    expect(given[2]).not.toBe(given[0])
+  })
+
+  it('forgets the identity of an attempt once its message is sent', async () => {
+    const fake = fakeClient()
+    const messenger = messengerOver(fake.client, fake.asking)
+    const attempt = {}
+    await messenger.send('42', 'Again', attempt)
+    await messenger.send('42', 'Again', attempt)
+    expect((await messenger.history('42', 10)).filter(message => message.text === 'Again')).toHaveLength(2)
   })
 })

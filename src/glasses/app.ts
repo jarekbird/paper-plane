@@ -184,9 +184,11 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
     let state: 'ready' | 'writing' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    let attempt = {}
     let unwritten = spoken && writer !== undefined && instructed(asSaid)
     const show = (text: string) => {
       words = text
+      attempt = {}
       lines = wrapText(words, SCREEN_WIDTH)
       scroll.reset()
     }
@@ -216,7 +218,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         redraw()
         let sent: Message
         try {
-          sent = await screen.guard(messenger.send(id, words))
+          sent = await screen.guard(messenger.send(id, words, attempt))
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = 'failed'
@@ -340,6 +342,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
+    const attempts = new Map<string, object>()
     const channel = inbox.chat(id)?.kind === 'channel'
     let ad: Sponsored | null = null
     let adAsked = false
@@ -560,9 +563,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           return
         }
         sending = true
+        const attempt = attempts.get(text) ?? {}
+        attempts.set(text, attempt)
         let message: Message
         try {
-          message = await screen.guard(messenger.send(id, text))
+          message = await screen.guard(messenger.send(id, text, attempt))
+          attempts.delete(text)
         } catch (error) {
           sending = false
           if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notSent))
@@ -668,7 +674,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       .map(chat => chat.id)
       .sort()
   const markRead = async (ids: readonly string[]) => {
-    await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+    try {
+      await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+    } catch (error) {
+      if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notRead))
+      return
+    }
+    redraw()
   }
 
   const readAll = action<readonly string[]>({
@@ -681,10 +693,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       const ids = unread()
       return [{ id: ids.join(' '), say: WORDS.listedChats, value: ids }]
     },
-    choose: () =>
-      void markRead(unread()).then(redraw, error => {
-        if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notRead))
-      }),
+    choose: () => void markRead(unread()),
     run: markRead,
   })
 

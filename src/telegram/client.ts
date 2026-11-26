@@ -1,5 +1,7 @@
 import type { Lifetime } from 'earshot'
+import type { tl } from '@mtcute/core'
 import { BaseTelegramClient, TelegramClient } from '@mtcute/core/client.js'
+import { randomLong } from '@mtcute/core/utils.js'
 import type { Account, Messenger } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 import { messengerOver, type ClientLike, type LinkState } from './messenger.ts'
@@ -15,7 +17,7 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
   const linked = new Set<Linked>()
   let current = make()
 
-  const live: AuthClientLike & ClientLike = {
+  const live: AuthClientLike & ClientLike<tl.Long> = {
     sendCode: params => current.sendCode(params),
     signIn: params => current.signIn(params),
     checkPassword: password => current.checkPassword(password),
@@ -35,6 +37,7 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     },
     iterDialogs: params => current.iterDialogs(params),
     getHistory: (chat, params) => current.getHistory(chat, params),
+    randomId: () => randomLong(),
     sendText: (chat, text, params) => current.sendText(chat, text, params),
     readHistory: chat => current.readHistory(chat),
     deleteMessagesById: (chat, ids, params) => current.deleteMessagesById(chat, ids, params),
