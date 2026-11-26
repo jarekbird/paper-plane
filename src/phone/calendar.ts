@@ -12,6 +12,8 @@ export interface ConnectView {
 
 const WRONG_CODE = 'That code is not right, or it is more than five minutes old. Start again.'
 const NOT_REACHED = 'Could not reach the relay. Try again.'
+const NOT_UNDONE =
+  'Google Calendar is connected: the connection you left could not be undone, and Google could not be told. Disconnect if you did not mean to.'
 const NOT_DISCONNECTED = 'Could not disconnect on this phone. Try again.'
 const DISCONNECTED_HERE =
   'Disconnected on this phone, but the sign-in could not be fully removed and Google could not be told. End it in your Google account, under Security, Third-party access.'
@@ -47,7 +49,7 @@ export class Connect {
       if (error instanceof LifetimeEnded) return
       known = false
     }
-    if (known) this.#show({ step: 'on' })
+    if (known) this.#show({ step: 'on', problem: this.#view.step === 'on' ? this.#view.problem : null })
     else if (this.#view.step !== 'code') this.#show({ step: 'off', problem: this.#view.step === 'on' ? null : this.#view.problem })
   }
 
@@ -68,7 +70,10 @@ export class Connect {
     const attempt = this.#busy()
     try {
       const connected = await this.#life.guard(this.#account.finish(typed, attempt.signal))
-      if (attempt.signal.aborted) return
+      if (attempt.signal.aborted) {
+        if (connected) this.#stayed()
+        return
+      }
       this.#show(connected ? { step: 'on' } : { step: 'off', problem: WRONG_CODE })
     } catch (error) {
       if (!(error instanceof LifetimeEnded) && !attempt.signal.aborted) this.#show({ step: 'code', link, problem: NOT_REACHED })
@@ -94,6 +99,12 @@ export class Connect {
     }
     if (attempt.signal.aborted) return
     this.#show({ step: 'off', problem: left === 'here' ? DISCONNECTED_HERE : null })
+  }
+
+  #stayed(): void {
+    this.#attempt.abort()
+    this.#attempt = new AbortController()
+    this.#show({ step: 'on', problem: NOT_UNDONE })
   }
 
   #busy(): AbortController {

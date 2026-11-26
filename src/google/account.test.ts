@@ -459,16 +459,18 @@ describe('the Google sign-in on the phone', () => {
     expect(await made.account.known()).toBe(false)
   })
 
-  it('A5: never calls a cancelled connect connected, also when the phone could not be put back: Google ends that sign-in and nobody is told', async () => {
+  const cancelledWhileWritten = async (googleHears: boolean) => {
     const made = world()
     const code = made.side.consent(await made.account.begin())
     const save = made.place.save
     let release: (() => void) | null = null
+    let removable = false
     made.place.save = async next => {
-      if (next === null) throw new Error('the store is full')
-      if (release === null) await new Promise<void>(resolve => (release = resolve))
+      if (next === null && !removable) throw new Error('the store is full')
+      if (next !== null && release === null) await new Promise<void>(resolve => (release = resolve))
       return save(next)
     }
+    made.side.deaf(!googleHears)
     let told = 0
     made.account.onChange(() => told++)
     const before = made.account.signIn()
@@ -477,9 +479,27 @@ describe('the Google sign-in on the phone', () => {
     await until(() => release !== null)
     leaving.abort()
     release!()
-    expect(await finishing).toBe('left')
-    expect(told).toBe(0)
+    return { made, outcome: await finishing, told: () => told, before, removable: () => void (removable = true) }
+  }
+
+  it('A5: does not count a cancelled connect the phone could not put back, once Google has ended that sign-in, and removes it when the phone can', async () => {
+    const { made, outcome, told, before, removable } = await cancelledWhileWritten(true)
+    expect(outcome).toBe('left')
+    expect(told()).toBe(0)
     expect(made.account.signIn()).toBe(before)
     expect(made.side.revoked).toHaveLength(1)
+    expect(await made.account.known()).toBe(false)
+    expect(made.kept()).not.toBeNull()
+    removable()
+    expect(await made.account.known()).toBe(false)
+    expect(made.kept()).toBeNull()
+  })
+
+  it('S3: says the calendar is connected, rather than hide it, when a cancelled connect could neither be put back nor ended at Google', async () => {
+    const { made, outcome, told, before } = await cancelledWhileWritten(false)
+    expect(outcome).toBe(true)
+    expect(told()).toBe(1)
+    expect(made.account.signIn()).not.toBe(before)
+    expect(await made.account.known()).toBe(true)
   })
 })

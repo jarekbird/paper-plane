@@ -126,4 +126,29 @@ describe('connecting Google Calendar on the phone', () => {
     expect(connect.view().step).toBe('off')
     expect(connect.view().problem).toMatch(/End it in your Google account/)
   })
+
+  it('S3: says the calendar is connected, and how to undo it, when the user cancelled but the connection could not be undone', async () => {
+    let answer = () => {}
+    const { connect, session } = world({
+      wrap: account => ({
+        ...account,
+        finish: async () => {
+          await new Promise<void>(resolve => (answer = resolve))
+          session.connected = true
+          return true
+        },
+      }),
+    })
+    await connect.start()
+    await connect.begin()
+    const typing = connect.code(DEMO_PAIR_CODE)
+    connect.cancel()
+    expect(connect.view().step).toBe('off')
+    answer()
+    await typing
+    expect(connect.view().step).toBe('on')
+    expect(connect.view().problem).toMatch(/could not be undone.*Disconnect if you did not mean to/)
+    await connect.start()
+    expect(connect.view().problem).toMatch(/could not be undone/)
+  })
 })
