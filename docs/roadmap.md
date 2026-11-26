@@ -33,7 +33,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
 | 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    | built, on samples        |
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
-| 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              |                          |
+| 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              | built, on samples; never run on Telegram |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
 | 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.1.0: samples, voice |
 

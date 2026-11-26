@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Messenger } from './messenger.ts'
+import { TroubleError, type Messenger, type Trouble } from './messenger.ts'
 
 export interface ContractWorld {
   messenger: Messenger
@@ -8,6 +8,16 @@ export interface ContractWorld {
   channel: string
   saved(): Promise<string[]>
   sponsoredSeen(): Promise<number>
+  trouble(next: Trouble | null): Promise<void>
+}
+
+const troubleIn = async (work: Promise<unknown>) => {
+  try {
+    await work
+    return 'none'
+  } catch (error) {
+    return error instanceof TroubleError ? error.trouble : `not a TroubleError: ${String(error)}`
+  }
 }
 
 export function messengerContract(name: string, make: () => Promise<ContractWorld>): void {
@@ -125,6 +135,42 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       messenger.onChange(() => told++)()
       await messenger.send(chat, 'Nobody listens')
       expect(told).toBe(0)
+    })
+
+    it('fails every call, saying Telegram cannot be reached, while it cannot, and sends nothing', async () => {
+      const { messenger, chat, trouble } = await make()
+      const newest = (await messenger.history(chat, 1))[0]?.id
+      await trouble({ kind: 'unreachable' })
+      const calls = [
+        () => messenger.chats(),
+        () => messenger.history(chat, 1),
+        () => messenger.send(chat, 'Into the void'),
+        () => messenger.read(chat),
+      ]
+      for (const call of calls) expect(await troubleIn(call())).toEqual({ kind: 'unreachable' })
+      await trouble(null)
+      expect((await messenger.history(chat, 1))[0]?.id).toBe(newest)
+    })
+
+    it('says how long Telegram asks the user to wait, and sends nothing meanwhile', async () => {
+      const { messenger, chat, trouble } = await make()
+      const newest = (await messenger.history(chat, 1))[0]?.id
+      await trouble({ kind: 'wait', seconds: 120 })
+      expect(await troubleIn(messenger.send(chat, 'Too soon'))).toEqual({ kind: 'wait', seconds: 120 })
+      await trouble(null)
+      expect((await messenger.history(chat, 1))[0]?.id).toBe(newest)
+    })
+
+    it('tells listeners when Telegram cannot be reached any more, and when it can again', async () => {
+      const { messenger, trouble } = await make()
+      let told = 0
+      const stop = messenger.onChange(() => told++)
+      await trouble({ kind: 'unreachable' })
+      expect(told).toBeGreaterThan(0)
+      told = 0
+      await trouble(null)
+      expect(told).toBeGreaterThan(0)
+      stop()
     })
   })
 }

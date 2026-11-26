@@ -53,6 +53,12 @@ flowchart TB
 Two things leave the phone for the Worker, and nothing else (S1). The OpenRouter key and Google's client secret
 live only on the Worker (S3), which stores nothing but a Google sign-in on its way to the phone (S7).
 
+Trouble is part of the interfaces, not of a screen: a call of `Messenger` fails with `TroubleError` when Telegram
+cannot be reached (the service gives up on a call after fifteen seconds, and asks nothing once the connection has
+been gone three) or asks the user to wait, and tells its listeners when Telegram is back. A sign-in that Telegram
+ended from another device is told by `Account.onEnded`, after the service forgot it. The words for both are in
+`src/trouble.ts` and `src/phone/signin.ts`; the sample account stages each (`src/demo`, A6).
+
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its
 `Shell` reads the touchpad, runs the action a tap, a swipe, the menu or the voice chose, and its `Glasses` alone
 talks to the Even SDK bridge. Timers, listeners, sockets and requests belong to an Earshot `Lifetime` (A4), and code
@@ -85,6 +91,7 @@ flowchart LR
   src_replies_ts["src/replies.ts"]
   src_store_ts["src/store.ts"]
   src_telegram["src/telegram"]
+  src_trouble_ts["src/trouble.ts"]
   src_voice["src/voice"]
   src_writer_contract_ts["src/writer.contract.ts"]
   src_account_contract_ts --> src_messenger_ts
@@ -94,6 +101,8 @@ flowchart LR
   src_app_ts --> src_messenger_ts
   src_app_ts --> src_phone
   src_app_ts --> src_phrases_ts
+  src_app_ts --> src_trouble_ts
+  src_demo --> earshot
   src_demo --> src_instruction_ts
   src_demo --> src_messenger_ts
   src_glasses --> earshot
@@ -103,8 +112,10 @@ flowchart LR
   src_glasses --> src_names_ts
   src_glasses --> src_phrases_ts
   src_glasses --> src_replies_ts
+  src_glasses --> src_trouble_ts
   src_inbox_ts --> earshot
   src_inbox_ts --> src_messenger_ts
+  src_inbox_ts --> src_trouble_ts
   src_main_ts --> _evenrealities_even_hub_sdk
   src_main_ts --> earshot
   src_main_ts --> src_app_ts
@@ -125,6 +136,7 @@ flowchart LR
   src_telegram --> _mtcute
   src_telegram --> earshot
   src_telegram --> src_messenger_ts
+  src_trouble_ts --> src_messenger_ts
   src_voice --> earshot
   src_voice --> src_instruction_ts
   src_voice --> src_messenger_ts

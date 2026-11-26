@@ -39,6 +39,17 @@ export interface Messenger {
   onChange(told: () => void): () => void
 }
 
+export type Trouble = { kind: 'unreachable' } | { kind: 'wait'; seconds: number }
+
+export class TroubleError extends Error {
+  readonly trouble: Trouble
+
+  constructor(trouble: Trouble) {
+    super(trouble.kind)
+    this.trouble = trouble
+  }
+}
+
 export type SignInProblem = 'phone' | 'code' | 'expired' | 'password' | 'wait' | 'other'
 
 export class SignInError extends Error {
@@ -62,6 +73,7 @@ export interface Account {
   giveCode(code: string, signal: AbortSignal): Promise<Who | 'password'>
   givePassword(password: string, signal: AbortSignal): Promise<Who>
   signOut(): Promise<'told' | 'untold'>
+  onEnded(told: () => void): () => void
 }
 
 export interface Writer {

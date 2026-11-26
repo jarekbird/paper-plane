@@ -1,8 +1,8 @@
 import { Lifetime } from 'earshot'
 import { tl } from '@mtcute/core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { accountContract } from '../account.contract.ts'
-import { SignInError } from '../messenger.ts'
+import { SignInError, TroubleError } from '../messenger.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 
 const PHONE = '+15550100199'
@@ -11,6 +11,7 @@ const PASSWORD = 'correct horse'
 const NAME = 'Anna Lee'
 const ME = { id: 4242, displayName: NAME }
 const live = () => new AbortController().signal
+const turn = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 const refuse = (text: string): never => {
   throw new tl.RpcError(400, text as never)
 }
@@ -77,6 +78,11 @@ for (const twoStep of [false, true]) {
     const made = world(twoStep)
     return {
       account: made.account,
+      endElsewhere: async () => {
+        made.side.revokeAll()
+        made.account.ended(made.account.era())
+        await turn()
+      },
       again: () => accountOver(new Lifetime(), made.side.client(), made.place),
       phone: PHONE,
       badPhone: '12',
@@ -354,5 +360,105 @@ describe('the Telegram account', () => {
     life.end()
     await account.giveCode(CODE, live()).catch(() => {})
     expect(saved).toBeNull()
+  })
+
+  it('forgets a sign-in Telegram ended while the app was running, and drops its connection so nothing keeps asking under it', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.side.revokeAll()
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toBeNull()
+    expect(made.first.drops).toBe(1)
+  })
+
+  it('A5: does not end a new sign-in on a late answer to a call made under an earlier one', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const earlier = made.account.era()
+    await made.account.signOut()
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(earlier)
+    await turn()
+    expect(told).toBe(0)
+    expect(made.saved()).toMatch(/^session-/)
+    expect(made.first.drops).toBe(0)
+  })
+
+  it('notices an ended sign-in after a launch that restored it', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = accountOver(new Lifetime(), made.side.client(), made.place)
+    await next.restore()
+    let told = 0
+    next.onEnded(() => told++)
+    next.ended(next.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toBeNull()
+  })
+
+  it('is not ended before anyone signed in', async () => {
+    const made = world(false)
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(0)
+    expect(made.first.drops).toBe(0)
+  })
+
+  it('gives up asking for a code when Telegram does not answer in fifteen seconds, so the user can try again', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      const sendCode = made.first.sendCode
+      made.first.sendCode = () => new Promise(() => {})
+      const asking = made.account.askCode(PHONE, live()).catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(await asking).toMatchObject({ problem: 'other' })
+      made.first.sendCode = sendCode
+      expect(await made.account.askCode(PHONE, live())).toBe('code')
+      expect(await made.account.giveCode(CODE, live())).toEqual({ id: '4242', name: NAME })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives up restoring a sign-in when Telegram does not answer in fifteen seconds, and keeps the sign-in for the next try', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      await made.account.askCode(PHONE, live())
+      await made.account.giveCode(CODE, live())
+      const silent = made.side.client()
+      let answer = () => {}
+      const getMe = silent.getMe
+      silent.getMe = () => new Promise(resolve => (answer = () => resolve(getMe())))
+      const restoring = accountOver(new Lifetime(), silent, made.place)
+        .restore()
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(14_999)
+      expect(silent.loops).toBe(0)
+      await vi.advanceTimersByTimeAsync(1)
+      const failure = await restoring
+      expect(failure).toBeInstanceOf(TroubleError)
+      expect((failure as TroubleError).trouble).toEqual({ kind: 'unreachable' })
+      expect(made.saved()).toMatch(/^session-/)
+      answer()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(silent.loops).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

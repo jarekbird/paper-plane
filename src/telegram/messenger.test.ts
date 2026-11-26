@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { Lifetime } from 'earshot'
+import { tl } from '@mtcute/core'
+import { describe, expect, it, vi } from 'vitest'
 import { messengerContract } from '../messenger.contract.ts'
+import { TroubleError } from '../messenger.ts'
 import type { DialogLike, MessageLike, PeerLike } from './map.ts'
-import { messengerOver, type ClientLike } from './messenger.ts'
+import { GRACE_MS, messengerOver, type ClientLike, type LinkState } from './messenger.ts'
+import { ANSWER_MS, answerWithin } from './trouble.ts'
+
+const refusal = (text: string, more: object = {}) => Object.assign(new tl.RpcError(400, text as never), more)
 
 function fakeClient() {
   let serial = 0
@@ -25,6 +31,12 @@ function fakeClient() {
     extra: 'not kept',
   }
   const listeners = new Set<(update: { name: string }) => void>()
+  const links = new Set<(state: LinkState) => void>()
+  const asked: string[] = []
+  const ended: number[] = []
+  let refused: Error | null = null
+  let since = 0
+  let era = 0
   const add = (chat: PeerLike, sender: PeerLike, text: string, isService = false): MessageLike => {
     const message: MessageLike = {
       id: ++serial,
@@ -80,15 +92,54 @@ function fakeClient() {
       peer(chat).chatType === 'channel' ? [ad, { ...ad, randomId: new Uint8Array([9]), title: 'A second one' }] : [],
     viewSponsored: async randomId => void viewed.push(Array.from(randomId).join(',')),
     onUpdate: { add: listener => void listeners.add(listener), remove: listener => void listeners.delete(listener) },
+    onConnectionState: { add: listener => void links.add(listener), remove: listener => void links.delete(listener) },
   }
+  const answering = <A extends unknown[], R>(name: string, call: (...args: A) => Promise<R>) =>
+    (async (...args: A) => {
+      asked.push(name)
+      if (refused) throw refused
+      return call(...args)
+    }) as (...args: A) => Promise<R>
+  const dialogs = client.iterDialogs
+  const guarded: ClientLike = {
+    ...client,
+    iterDialogs: async function* (params) {
+      asked.push('iterDialogs')
+      if (refused) throw refused
+      yield* dialogs(params)
+    },
+    getHistory: answering('getHistory', client.getHistory),
+    sendText: answering('sendText', client.sendText),
+    readHistory: answering('readHistory', client.readHistory),
+    deleteMessagesById: answering('deleteMessagesById', client.deleteMessagesById),
+    getPeerDialogs: answering('getPeerDialogs', client.getPeerDialogs),
+    saveDraft: answering('saveDraft', client.saveDraft),
+    forwardMessagesById: answering('forwardMessagesById', client.forwardMessagesById),
+    sendReaction: answering('sendReaction', client.sendReaction),
+    sponsoredMessages: answering('sponsoredMessages', client.sponsoredMessages),
+    viewSponsored: answering('viewSponsored', client.viewSponsored),
+  }
+  const life = new Lifetime()
   return {
-    client,
+    client: guarded,
+    asking: {
+      within: answerWithin(life, ANSWER_MS),
+      session: { era: () => era, ended: (at: number) => void ended.push(at) },
+      now: () => since,
+    },
+    life,
     peers,
     add,
     forwarded,
     viewed,
-    listening: () => listeners.size,
+    asked,
+    ended,
+    refuse: (error: Error | null) => void (refused = error),
+    later: (ms: number) => void (since += ms),
+    signedInAgain: () => void era++,
+    listening: () => listeners.size + links.size,
     emit: (name: string) => listeners.forEach(listener => listener({ name })),
+    link: (state: LinkState) => links.forEach(listener => listener(state)),
   }
 }
 
@@ -96,19 +147,26 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
   const fake = fakeClient()
   fake.add(fake.peers[2], fake.peers[2], 'Heads Up build week has started.')
   return {
-    messenger: messengerOver(fake.client),
+    messenger: messengerOver(fake.client, fake.asking),
     chat: '42',
     unreadChat: '-1001234',
     channel: '-1005678',
     saved: async () => fake.forwarded,
     sponsoredSeen: async () => fake.viewed.length,
+    trouble: async next => {
+      fake.refuse(next?.kind === 'wait' ? refusal('FLOOD_WAIT_%d', { seconds: next.seconds }) : null)
+      if (next?.kind === 'unreachable') {
+        fake.link('connecting')
+        fake.later(GRACE_MS)
+      } else fake.link('connected')
+    },
   }
 })
 
 describe('the Telegram adapter', () => {
   it('G6: gives the first sponsored message Telegram has for a channel, and tells Telegram it was seen by the id Telegram gave', async () => {
     const fake = fakeClient()
-    const messenger = messengerOver(fake.client)
+    const messenger = messengerOver(fake.client, fake.asking)
     const sponsored = await messenger.sponsored('-1005678')
     expect(sponsored).toEqual({ id: '00ab10ff', title: 'A sponsor', text: 'Sponsored words.', link: 'https://t.me/sponsor' })
     await messenger.sawSponsored(sponsored!)
@@ -118,13 +176,14 @@ describe('the Telegram adapter', () => {
   it('tells listeners when Telegram reports a message, an edit, a deletion or a read, and nothing else', () => {
     const fake = fakeClient()
     let told = 0
-    messengerOver(fake.client).onChange(() => told++)
+    messengerOver(fake.client, fake.asking).onChange(() => told++)
     for (const name of ['new_message', 'edit_message', 'delete_message', 'history_read', 'user_typing', 'user_status']) fake.emit(name)
     expect(told).toBe(4)
   })
 
   it('leaves a service notice such as "Cy joined" out of a chat’s history', async () => {
-    const history = await messengerOver(fakeClient().client).history('-1001234', 10)
+    const fake = fakeClient()
+    const history = await messengerOver(fake.client, fake.asking).history('-1001234', 10)
     expect(history.map(message => message.text)).toEqual(['Build is green.'])
   })
 
@@ -135,7 +194,7 @@ describe('the Telegram adapter', () => {
     fake.client.getPeerDialogs = () => new Promise(resolve => (answer = () => resolve([null])))
     fake.client.saveDraft = async () => void saves++
     const caller = new AbortController()
-    const keeping = messengerOver(fake.client).keep('42', 'See you at noon', caller.signal)
+    const keeping = messengerOver(fake.client, fake.asking).keep('42', 'See you at noon', caller.signal)
     caller.abort()
     answer()
     await expect(keeping).rejects.toThrow()
@@ -144,7 +203,144 @@ describe('the Telegram adapter', () => {
 
   it('stops listening to the client when it is closed', () => {
     const fake = fakeClient()
-    messengerOver(fake.client).close()
+    messengerOver(fake.client, fake.asking).close()
     expect(fake.listening()).toBe(0)
+  })
+})
+
+describe('the Telegram adapter, when Telegram is in trouble', () => {
+  const failure = async (work: Promise<unknown>) => {
+    const error: unknown = await work.then(
+      () => null,
+      (thrown: unknown) => thrown,
+    )
+    return error instanceof TroubleError ? error.trouble : error
+  }
+
+  it('gives up on a call Telegram does not answer in fifteen seconds, and says it cannot be reached', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeClient()
+      fake.client.getHistory = () => new Promise(() => {})
+      const asked = failure(messengerOver(fake.client, fake.asking).history('42', 3))
+      let settled = false
+      void asked.then(() => (settled = true))
+      await vi.advanceTimersByTimeAsync(ANSWER_MS - 1)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await asked).toEqual({ kind: 'unreachable' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('takes a message back out of the line when it gives up on sending it, so it does not go out later', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeClient()
+      let given: AbortSignal | undefined
+      fake.client.sendText = (_chat, _text, { abortSignal }) => {
+        given = abortSignal
+        return new Promise((_, reject) => abortSignal.addEventListener('abort', () => reject(new Error('aborted'))))
+      }
+      const sending = failure(messengerOver(fake.client, fake.asking).send('42', 'Never mind'))
+      await vi.advanceTimersByTimeAsync(ANSWER_MS)
+      expect(await sending).toEqual({ kind: 'unreachable' })
+      expect(given?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A4: leaves no timer behind for a call that was answered', async () => {
+    const fake = fakeClient()
+    const before = fake.life.owned
+    await messengerOver(fake.client, fake.asking).history('42', 3)
+    expect(fake.life.owned).toBe(before)
+  })
+
+  it('still asks Telegram just after the connection was lost, and stops asking once it has been gone three seconds', async () => {
+    const fake = fakeClient()
+    const messenger = messengerOver(fake.client, fake.asking)
+    fake.link('connecting')
+    fake.later(GRACE_MS - 1)
+    await messenger.history('42', 3)
+    expect(fake.asked).toEqual(['getHistory'])
+    fake.later(1)
+    expect(await failure(messenger.history('42', 3))).toEqual({ kind: 'unreachable' })
+    expect(await failure(messenger.send('42', 'Hello?'))).toEqual({ kind: 'unreachable' })
+    expect(fake.asked).toEqual(['getHistory'])
+    fake.link('connected')
+    await messenger.history('42', 3)
+    expect(fake.asked).toEqual(['getHistory', 'getHistory'])
+  })
+
+  it('tells listeners once when the connection is lost and once when it is back', () => {
+    const fake = fakeClient()
+    let told = 0
+    messengerOver(fake.client, fake.asking).onChange(() => told++)
+    for (const state of ['connected', 'connecting', 'connecting', 'offline'] as const) fake.link(state)
+    expect(told).toBe(1)
+    for (const state of ['updating', 'connected'] as const) fake.link(state)
+    expect(told).toBe(2)
+  })
+
+  it('tells listeners when Telegram answers again after a call went unanswered, also if no loss of connection was reported', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeClient()
+      const messenger = messengerOver(fake.client, fake.asking)
+      const history = fake.client.getHistory
+      fake.client.getHistory = () => new Promise(() => {})
+      const unanswered = failure(messenger.history('42', 3))
+      await vi.advanceTimersByTimeAsync(ANSWER_MS)
+      await unanswered
+      let told = 0
+      messenger.onChange(() => told++)
+      fake.client.getHistory = history
+      await messenger.history('42', 3)
+      expect(told).toBe(1)
+      await messenger.history('42', 3)
+      expect(told).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['FLOOD_WAIT_%d', 'SLOWMODE_WAIT_%d', 'FLOOD_PREMIUM_WAIT_%d'])('reads how long to wait from Telegram’s %s', async text => {
+    const fake = fakeClient()
+    fake.refuse(refusal(text, { seconds: 45 }))
+    expect(await failure(messengerOver(fake.client, fake.asking).send('42', 'Again'))).toEqual({ kind: 'wait', seconds: 45 })
+  })
+
+  it.each(['AUTH_KEY_UNREGISTERED', 'AUTH_KEY_INVALID', 'SESSION_REVOKED', 'SESSION_EXPIRED', 'USER_DEACTIVATED', 'USER_DEACTIVATED_BAN'])(
+    'reports the sign-in as ended when Telegram answers %s, for the sign-in the call was made under',
+    async text => {
+      const fake = fakeClient()
+      let answer = () => {}
+      fake.client.getHistory = () => new Promise((_, reject) => (answer = () => reject(refusal(text))))
+      const asked = failure(messengerOver(fake.client, fake.asking).history('42', 3))
+      fake.signedInAgain()
+      answer()
+      expect(await asked).toBeInstanceOf(tl.RpcError)
+      expect(fake.ended).toEqual([0])
+    },
+  )
+
+  it('does not take another refusal for an ended sign-in or for trouble', async () => {
+    const fake = fakeClient()
+    fake.refuse(refusal('PEER_ID_INVALID'))
+    expect(await failure(messengerOver(fake.client, fake.asking).history('42', 3))).toBeInstanceOf(tl.RpcError)
+    expect(fake.ended).toEqual([])
+  })
+
+  it('S4: says what kind of trouble it is and nothing of what Telegram answered', async () => {
+    const fake = fakeClient()
+    fake.refuse(refusal('FLOOD_WAIT_%d', { seconds: 45 }))
+    const error = await messengerOver(fake.client, fake.asking)
+      .send('42', 'Again')
+      .catch((thrown: unknown) => thrown)
+    expect((error as Error).message).toBe('wait')
+    expect((error as Error).cause).toBeUndefined()
   })
 })

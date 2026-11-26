@@ -1,4 +1,4 @@
-import type { Chat, ChatKind, Message, Messenger, Sponsored } from '../messenger.ts'
+import { TroubleError, type Chat, type ChatKind, type Message, type Messenger, type Sponsored, type Trouble } from '../messenger.ts'
 
 interface DemoChat {
   id: string
@@ -64,6 +64,7 @@ export interface DemoMessenger extends Messenger {
   saved(): readonly Message[]
   seenSponsored(): readonly string[]
   drafts(): ReadonlyMap<string, string>
+  trouble(next: Trouble | null): void
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
@@ -73,6 +74,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const kept: Message[] = []
   const seenAds: string[] = []
   const drafts = new Map<string, string>()
+  let trouble: Trouble | null = null
   const message = (chat: string, from: string, text: string, at: number): Message => ({
     id: `m${++serial}`,
     chat,
@@ -90,6 +92,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     unread: entry.unread,
     messages: entry.lines.map(([from, text], index) => message(entry.id, from, text, started - (entry.lines.length - index) * MINUTE)),
   }))
+  const reach = () => {
+    if (trouble) throw new TroubleError(trouble)
+  }
   const find = (id: string): DemoChat => {
     const chat = chats.find(candidate => candidate.id === id)
     if (!chat) throw new Error('No such chat')
@@ -101,16 +106,22 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const newestFirst = (a: DemoChat, b: DemoChat) => (b.messages.at(-1)?.at ?? 0) - (a.messages.at(-1)?.at ?? 0)
 
   return {
-    chats: async (): Promise<Chat[]> =>
-      [...chats].sort(newestFirst).map(chat => ({
+    chats: async (): Promise<Chat[]> => {
+      reach()
+      return [...chats].sort(newestFirst).map(chat => ({
         id: chat.id,
         title: chat.title,
         kind: chat.kind,
         unread: chat.unread,
         last: chat.messages.at(-1) ?? null,
-      })),
-    history: async (id, limit) => find(id).messages.slice(-limit),
+      }))
+    },
+    history: async (id, limit) => {
+      reach()
+      return find(id).messages.slice(-limit)
+    },
     send: async (id, text) => {
+      reach()
       const chat = find(id)
       const sent = message(id, 'You', text, now())
       chat.messages.push(sent)
@@ -119,12 +130,14 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       return sent
     },
     read: async id => {
+      reach()
       const chat = find(id)
       if (chat.unread === 0) return
       chat.unread = 0
       tell()
     },
     unsend: async sent => {
+      reach()
       const chat = find(sent.chat)
       const at = chat.messages.findIndex(message => message.id === sent.id && message.mine)
       if (at < 0) throw new Error('No such message')
@@ -133,25 +146,32 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     },
     keep: async (id, text, signal) => {
       signal.throwIfAborted()
+      reach()
       find(id)
       if (drafts.has(id)) return false
       drafts.set(id, text)
       return true
     },
     save: async message => {
+      reach()
       const found = find(message.chat).messages.find(candidate => candidate.id === message.id)
       if (!found) throw new Error('No such message')
       kept.push(found)
     },
     like: async message => {
+      reach()
       const chat = find(message.chat)
       const at = chat.messages.findIndex(candidate => candidate.id === message.id)
       if (at < 0) throw new Error('No such message')
       chat.messages[at] = { ...chat.messages[at], liked: true }
       tell()
     },
-    sponsored: async id => (find(id).kind === 'channel' ? DEMO_SPONSORED : null),
+    sponsored: async id => {
+      reach()
+      return find(id).kind === 'channel' ? DEMO_SPONSORED : null
+    },
     sawSponsored: async sponsored => {
+      reach()
       if (sponsored.id !== DEMO_SPONSORED.id) throw new Error('No such sponsored message')
       seenAds.push(sponsored.id)
     },
@@ -178,5 +198,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     sent: () => outbox,
     saved: () => kept,
     drafts: () => drafts,
+    trouble: next => {
+      trouble = next
+      tell()
+    },
   }
 }

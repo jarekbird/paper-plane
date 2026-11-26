@@ -283,3 +283,53 @@ describe('signing in on the phone', () => {
     expect(changes).toEqual([])
   })
 })
+
+describe('a sign-in ended from another device', () => {
+  const ended = () => {
+    const session: DemoSession = { signedIn: true }
+    const account = demoAccount(session)
+    const changes: [Who | null, boolean][] = []
+    const signIn = new SignIn(new Lifetime(), account, (who, gone = false) => void changes.push([who, gone]))
+    return { account, signIn, changes, session }
+  }
+
+  it('asks the user to sign in again, says why, and has the app leave their chats', async () => {
+    const { account, signIn, changes } = ended()
+    await signIn.start(true)
+    account.endElsewhere()
+    expect(signIn.view()).toEqual({ step: 'phone', busy: false, problem: 'Your Telegram sign-in has ended. Sign in again.', name: null })
+    expect(changes).toEqual([[null, true]])
+  })
+
+  it('takes a new sign-in afterwards', async () => {
+    const { account, signIn, changes } = ended()
+    await signIn.start(true)
+    account.endElsewhere()
+    await signIn.phone(PHONE)
+    await signIn.code(DEMO_CODE)
+    expect(signIn.view().step).toBe('in')
+    expect(changes.at(-1)).toEqual([DEMO_WHO, false])
+  })
+
+  it('A5: leaves a sign-out the user started alone, and does not call it ended', async () => {
+    const { account, signIn, changes } = ended()
+    await signIn.start(true)
+    const leaving = signIn.signOut()
+    account.endElsewhere()
+    await leaving
+    expect(signIn.view()).toEqual({ step: 'phone', busy: false, problem: null, name: null })
+    expect(changes).toEqual([[null, false]])
+  })
+
+  it('A4: is not listened for once the app has ended', async () => {
+    const session: DemoSession = { signedIn: true }
+    const account = demoAccount(session)
+    const life = new Lifetime()
+    const changes: (Who | null)[] = []
+    const signIn = new SignIn(life, account, who => void changes.push(who))
+    await signIn.start(true)
+    life.end()
+    account.endElsewhere()
+    expect(changes).toEqual([])
+  })
+})

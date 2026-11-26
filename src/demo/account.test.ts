@@ -4,8 +4,10 @@ import { DEMO_CODE, DEMO_PASSWORD, demoAccount, type DemoSession } from './accou
 for (const twoStep of [false, true]) {
   accountContract(`the sample account${twoStep ? ' with a password' : ''}`, async () => {
     const session: DemoSession = { signedIn: false }
+    const account = demoAccount(session, twoStep)
     return {
-      account: demoAccount(session, twoStep),
+      account,
+      endElsewhere: async () => account.endElsewhere(),
       again: () => demoAccount(session, twoStep),
       phone: '+1 555 010 0199',
       badPhone: '12',

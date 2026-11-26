@@ -8,7 +8,12 @@ export interface DemoSession {
   signedIn: boolean
 }
 
-export function demoAccount(session: DemoSession, twoStep = false, who: Who = DEMO_WHO): Account {
+export interface DemoAccount extends Account {
+  endElsewhere(): void
+}
+
+export function demoAccount(session: DemoSession, twoStep = false, who: Who = DEMO_WHO): DemoAccount {
+  const listeners = new Set<() => void>()
   let asked = false
   let needsPassword = false
   const enter = (signal: AbortSignal) => {
@@ -41,6 +46,15 @@ export function demoAccount(session: DemoSession, twoStep = false, who: Who = DE
     signOut: async () => {
       session.signedIn = false
       return 'told'
+    },
+    onEnded: told => {
+      listeners.add(told)
+      return () => void listeners.delete(told)
+    },
+    endElsewhere: () => {
+      if (!session.signedIn) return
+      session.signedIn = false
+      for (const told of [...listeners]) told()
     },
   }
 }

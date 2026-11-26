@@ -30,6 +30,7 @@ import type { Chat, Message, Messenger, Sponsored, Writer } from '../messenger.t
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
+import { troubleWords } from '../trouble.ts'
 
 export interface Hearing {
   transcribe: VoiceOptions['transcribe']
@@ -220,6 +221,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           if (error instanceof LifetimeEnded) return
           state = 'failed'
           redraw()
+          const why = troubleWords(error, '')
+          if (why) shell.notice(why)
           return
         }
         state = 'sent'
@@ -245,7 +248,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = before
-          shell.notice(WORDS.notKept)
+          shell.notice(troubleWords(error, WORDS.notKept))
           return
         }
         if (!kept) {
@@ -328,6 +331,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
     let failed = false
+    let why = WORDS.noLoad
     let started = 0
     let readUpTo: string | null | undefined
     let seenClear: string | null = null
@@ -347,7 +351,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       blocks: { message: Message; from: number; to: number }[]
       ad: { from: number; to: number } | null
     } => {
-      if (failed) return { lines: [WORDS.noLoad], blocks: [], ad: null }
+      if (failed) return { lines: wrapText(why, SCREEN_WIDTH), blocks: [], ad: null }
       if (messages === null) return { lines: [WORDS.loading], blocks: [], ad: null }
       if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [], ad: null }
       const chat = inbox.chat(id)
@@ -387,6 +391,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         if (error instanceof LifetimeEnded || turn !== started) return
         pending = false
         failed = true
+        why = troubleWords(error, WORDS.noLoad)
         redraw()
         return
       }
@@ -453,7 +458,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         try {
           await screen.guard(messenger.unsend(pending.message))
         } catch (error) {
-          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notUndone)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notUndone))
           return
         }
         shell.notice(WORDS.undone)
@@ -486,7 +491,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           await entered.guard(spec.act(message))
         } catch (error) {
           acting = false
-          if (!(error instanceof LifetimeEnded)) shell.notice(spec.failed)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, spec.failed))
           return
         }
         acting = false
@@ -560,7 +565,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           message = await screen.guard(messenger.send(id, text))
         } catch (error) {
           sending = false
-          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notSent)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notSent))
           return
         }
         sending = false
@@ -678,7 +683,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     },
     choose: () =>
       void markRead(unread()).then(redraw, error => {
-        if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notRead)
+        if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notRead))
       }),
     run: markRead,
   })
@@ -687,7 +692,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     home: {
       id: 'chats',
       context: () => 'The list of chats',
-      view: () => list({ title: parts.title ?? WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
+      view: () =>
+        list({
+          title: inbox.problem && inbox.picked().length ? inbox.problem : (parts.title ?? WORDS.title),
+          action: open,
+          empty: inbox.problem ?? WORDS.noChats,
+        }),
     },
     actions: () => [open, message, readAll],
   })

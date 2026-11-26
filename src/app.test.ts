@@ -44,7 +44,7 @@ async function world(options: Options = {}) {
     await app.signIn!.code(DEMO_CODE)
     await settle()
   }
-  return { app, life, fake, store, session, sample, own, signIn, phones }
+  return { app, life, fake, store, session, sample, own, signIn, phones, account }
 }
 
 beforeEach(() => void vi.useFakeTimers())
@@ -154,6 +154,7 @@ describe('at launch, while Telegram has not answered yet', () => {
     telegram.answer()
     await settle()
     expect(made.app.scope()).toBe('sample')
+    await settle(5_000)
     expect(made.fake.lines()).toEqual(SAMPLE_HOME)
   })
 
@@ -217,6 +218,8 @@ describe('at launch, while Telegram has not answered yet', () => {
     made.fake.tap()
     await settle()
     expect(made.app.scope()).toBe('sample')
+    expect(made.fake.overlay()).toBe('Signed out of Telegram')
+    await settle(5_000)
     expect(made.fake.lines()).toEqual(SAMPLE_HOME)
     expect(made.app.signIn!.view().step).toBe('phone')
   })
@@ -233,5 +236,54 @@ describe('at launch, while Telegram has not answered yet', () => {
     expect(made.app.scope()).toBe('sample')
     expect(made.fake.lines()).toEqual(SAMPLE_HOME)
     expect(made.phones.length).toBeGreaterThan(0)
+  })
+})
+
+describe('a sign-in ended from another device', () => {
+  const SIGNED_OUT = 'Signed out of Telegram'
+
+  it('takes the user’s chats off the glasses at once, says so there, and shows the sample chats', async () => {
+    const made = await world({ signedIn: true })
+    expect(made.app.scope()).toBe('telegram')
+    made.account.endElsewhere()
+    await settle(100)
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.overlay()).toBe(SIGNED_OUT)
+    await settle(5_000)
+    expect(made.fake.overlay()).toBe('')
+    expect(made.fake.lines()).toEqual(SAMPLE_HOME)
+    expect(made.app.signIn!.view().step).toBe('phone')
+  })
+
+  it('says so on the glasses too when the sign-in turns out to be gone at launch', async () => {
+    const made = await world({
+      signedIn: true,
+      wrap: account => ({ ...account, restore: async () => null }),
+    })
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.overlay()).toBe(SIGNED_OUT)
+  })
+
+  it('says nothing of the kind when the user signs out on the phone', async () => {
+    const made = await world({ signedIn: true })
+    await made.app.signIn!.signOut()
+    await settle(100)
+    expect(made.app.scope()).toBe('sample')
+    expect(made.fake.overlay()).toBe('')
+  })
+
+  it('S5: drops a reply that was waiting for its tap, so nothing meant for the user’s chat can be sent afterwards', async () => {
+    const made = await world({ signedIn: true })
+    await made.app.inbox()!.pick(['anna'])
+    await settle()
+    made.fake.tap()
+    await settle()
+    made.fake.tap()
+    await settle()
+    made.account.endElsewhere()
+    await settle(5_000)
+    made.fake.tap()
+    await settle()
+    expect(made.own.sent()).toEqual([])
   })
 })
