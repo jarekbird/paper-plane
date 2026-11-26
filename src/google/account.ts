@@ -72,8 +72,11 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
   let orphan: string | null = null
   const current = () =>
     inTurn(async () => {
-      if (orphan !== null && (await life.guard(stored(null)))) orphan = null
-      return { have: orphan === null ? parsed(await life.guard(place.load())) : null, of: signIn }
+      const kept = await life.guard(place.load())
+      if (orphan !== null && kept !== orphan) orphan = null
+      if (orphan === null) return { have: parsed(kept), of: signIn }
+      if (await life.guard(stored(null))) orphan = null
+      return { have: null, of: signIn }
     })
 
   const holds = async (wanted: string | null): Promise<boolean> => {
@@ -207,8 +210,8 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
         const stays = await life.guard(
           inTurn(async () => {
             if (!(await life.guard(holds(next)))) return false
-            if (ended) orphan = next
-            else signIn++
+            orphan = ended ? next : null
+            if (!ended) signIn++
             return !ended
           }),
         )

@@ -547,4 +547,44 @@ describe('the Google sign-in on the phone', () => {
       expect((await account.token(generation, live())).value).toMatch(/^access-/)
     },
   )
+
+  it.each(['can remove nothing', 'works again'])(
+    'A5: counts a second cancelled connect that could not be undone, though one before it was set aside, while the phone’s store %s',
+    async storage => {
+      const side = googleSide()
+      let kept: string | null = null
+      let removable = false
+      const holds: (() => void)[] = []
+      const place: GooglePlace = {
+        load: async () => kept,
+        save: async next => {
+          if (next === null || (kept !== null && next === first)) {
+            if (!removable) throw new Error('the store is full')
+          } else await new Promise<void>(resolve => holds.push(resolve))
+          kept = next
+        },
+      }
+      let first: string | null = null
+      const account = googleAccount(new Lifetime(), { relay: 'https://relay.example', place, ask: side.ask, now: () => 1_800_000_000_000 })
+      const cancelled = async () => {
+        const leaving = new AbortController()
+        const finishing = account.finish(side.consent(await account.begin()), leaving.signal).catch(() => 'left')
+        await until(() => holds.length === 1)
+        leaving.abort()
+        holds.splice(0)[0]()
+        return finishing
+      }
+      expect(await cancelled()).toBe('left')
+      first = kept
+      expect(first).not.toBeNull()
+      expect(await account.known()).toBe(false)
+      side.deaf(true)
+      expect(await cancelled()).toBe(true)
+      const second = kept
+      expect(second).not.toBe(first)
+      removable = storage === 'works again'
+      expect(await account.known()).toBe(true)
+      expect(kept).toBe(second)
+    },
+  )
 })
