@@ -23,13 +23,13 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | built, on samples        |
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | built, on samples        |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
-| 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |
+| 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built; sent on Telegram  |
 | 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        | built; 93 of 102 on the real model |
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
 | 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built; 48 of 50; no mute |
-| 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
+| 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built; undone on Telegram |
 | 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         | built, on samples; never run on Google |
-| 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
+| 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built; draft kept on Telegram; Save on samples |
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
 | 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    | built, on samples        |
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
@@ -45,8 +45,11 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
   has no Telegram and shows only the sample account.
 - `VITE_RELAY` is in the build (the Worker `paper-plane-relay` is deployed and holds its key): without it a hold on
   real glasses hears nothing.
-- A run on real Telegram, on Jarek's own account: signing in, the list of chats, staying signed in over a restart
-  and signing out are done. Sending is still to do, writing only to Saved Messages.
+- Runs on real Telegram, on Jarek's own account, from the app in the simulator, writing only to Saved Messages:
+  signing in, the list of chats, staying signed in over a restart, signing out; a reply sent (it was in Saved
+  Messages within half a second of the tap) and undone; "Keep for later" (the draft showed in Telegram Web).
+  The words of each hold were scripted, not spoken. Not tried there: folders, mentions, channels, reactions, the
+  trouble paths.
 
 ## Not now
 

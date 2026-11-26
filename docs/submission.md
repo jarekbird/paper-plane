@@ -9,7 +9,7 @@ Dubai), on DoraHacks, as `jarekbird`. The terms are in `docs/hackathon.md`.
 | --- | --- | --- |
 | Public repository | <https://github.com/jarekbird/paper-plane> | there |
 | README with setup, and what existed before 23 November | `README.md` | there; last pass before filing |
-| Demo video, up to 3 minutes | filmed by Jarek from the script below | to film |
+| Demo video, up to 3 minutes; DoraHacks takes it as a link | filmed by Jarek from the script below, then uploaded (unlisted is enough) | to film |
 | Short description: the problem, who it is for, how it works, the track | below | draft |
 | Packed `.ehpk` (optional) | `npm run pack`; the beta on the Even Hub | 0.2.0 is on beta |
 | Up to five feature requests for the APIs used (optional) | below | draft |
@@ -64,9 +64,9 @@ Google sign-in on its way to the phone, for five minutes at most.
 
 **To be honest about.** Say in the description what was run where, as the README does. As of 26 November: every
 screen and the voice flow run on a built-in sample account; the voice relay and both models were tried live; on
-real Telegram the app signed in, listed the chats, stayed signed in over a restart and signed out; the calendar
-runs on a sample calendar; sending on real Telegram, anything against Google and a run on real glasses are not
-proven yet. Update this paragraph, and the README's "State", on the day of filing.
+real Telegram the app signed in, listed the chats, stayed signed in over a restart, sent a reply to Saved Messages
+and undid it, kept a reply as a draft, and signed out; the calendar runs on a sample calendar; anything against
+Google and a run on real glasses are not proven yet. Update this paragraph, and the README's "State", on the day of filing.
 
 ## Video: up to 3 minutes
 
