@@ -7,7 +7,7 @@ export interface ClientLike<Id> {
   getHistory(chat: number, params: { limit: number }): Promise<MessageLike[]>
   randomId(): Id
   sendText(chat: number, text: string, params: { abortSignal: AbortSignal; randomId: Id }): Promise<MessageLike>
-  readHistory(chat: number): Promise<void>
+  readHistory(chat: number, params: { clearMentions: true }): Promise<void>
   deleteMessagesById(chat: number, ids: number[], params: { revoke: boolean }): Promise<void>
   getPeerDialogs(chat: number): Promise<(DialogLike | null)[]>
   saveDraft(chat: number, draft: { message: string }): Promise<void>
@@ -121,7 +121,7 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
       return toMessage(sent)
     },
     read: async chat => {
-      await ask(() => client.readHistory(Number(chat)))
+      await ask(() => client.readHistory(Number(chat), { clearMentions: true }))
       changed()
     },
     unsend: async message => {

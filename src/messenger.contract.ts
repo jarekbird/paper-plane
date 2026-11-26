@@ -5,6 +5,7 @@ export interface ContractWorld {
   messenger: Messenger
   chat: string
   unreadChat: string
+  mentionedChat: string
   channel: string
   saved(): Promise<string[]>
   sponsoredSeen(): Promise<number>
@@ -57,6 +58,14 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       expect(await unread()).toBeGreaterThan(0)
       await messenger.read(unreadChat)
       expect(await unread()).toBe(0)
+    })
+
+    it('says which chat has new messages that mention the user, until that chat is marked read', async () => {
+      const { messenger, mentionedChat } = await make()
+      const mentions = async () => (await messenger.chats()).map(chat => [chat.id, chat.mentions > 0])
+      expect((await mentions()).filter(([, mentioned]) => mentioned)).toEqual([[mentionedChat, true]])
+      await messenger.read(mentionedChat)
+      expect((await mentions()).filter(([, mentioned]) => mentioned)).toEqual([])
     })
 
     it('takes back a message the user sent, for everyone, and tells listeners', async () => {

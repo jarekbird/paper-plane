@@ -22,6 +22,7 @@ export interface MessageLike {
 export interface DialogLike {
   peer: PeerLike
   unreadCount: number
+  unreadMentionsCount: number
   lastMessage: MessageLike | null
   draftMessage: { text: string } | null
 }
@@ -74,6 +75,7 @@ export function toChat(dialog: DialogLike): Chat {
     title: dialog.peer.displayName,
     kind: kindOf(dialog.peer),
     unread: dialog.unreadCount,
+    mentions: dialog.unreadMentionsCount,
     last: last && !last.isService ? toMessage(last) : null,
   }
 }

@@ -5,12 +5,13 @@ interface DemoChat {
   title: string
   kind: ChatKind
   unread: number
+  mentions: number
   messages: Message[]
 }
 
 const MINUTE = 60_000
 
-const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines: [from: string, text: string][] }[] = [
+const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; mentions?: number; lines: [from: string, text: string][] }[] = [
   {
     id: 'anna',
     title: 'Anna',
@@ -27,10 +28,11 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; lines
     title: 'Launch crew',
     kind: 'group',
     unread: 1,
+    mentions: 1,
     lines: [
       ['Ben', 'Build is green.'],
       ['You', 'Shipping after the review.'],
-      ['Cy', 'Can someone confirm the demo time for Thursday?'],
+      ['Cy', '@you Can you confirm the demo time for Thursday?'],
     ],
   },
   {
@@ -58,7 +60,7 @@ export const DEMO_SPONSORED: Sponsored = {
 }
 
 export interface DemoMessenger extends Messenger {
-  arrive(chat: string, from: string, text: string): Message
+  arrive(chat: string, from: string, text: string, mentions?: boolean): Message
   edit(message: Message, text: string): void
   sent(): readonly Message[]
   saved(): readonly Message[]
@@ -93,6 +95,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     title: entry.title,
     kind: entry.kind,
     unread: entry.unread,
+    mentions: entry.mentions ?? 0,
     messages: entry.lines.map(([from, text], index) => message(entry.id, from, text, started - (entry.lines.length - index) * MINUTE)),
   }))
   const reach = () => {
@@ -116,6 +119,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
         title: chat.title,
         kind: chat.kind,
         unread: chat.unread,
+        mentions: chat.mentions,
         last: chat.messages.at(-1) ?? null,
       }))
     },
@@ -142,8 +146,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     read: async id => {
       reach()
       const chat = find(id)
-      if (chat.unread === 0) return
+      if (chat.unread === 0 && chat.mentions === 0) return
       chat.unread = 0
+      chat.mentions = 0
       tell()
     },
     unsend: async sent => {
@@ -190,11 +195,12 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       listeners.add(told)
       return () => void listeners.delete(told)
     },
-    arrive: (id, from, text) => {
+    arrive: (id, from, text, mentions = false) => {
       const chat = find(id)
       const arrived = message(id, from, text, now())
       chat.messages.push(arrived)
       chat.unread++
+      if (mentions) chat.mentions++
       tell()
       return arrived
     },

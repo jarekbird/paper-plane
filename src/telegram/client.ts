@@ -39,7 +39,7 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
     getHistory: (chat, params) => current.getHistory(chat, params),
     randomId: () => randomLong(),
     sendText: (chat, text, params) => current.sendText(chat, text, params),
-    readHistory: chat => current.readHistory(chat),
+    readHistory: (chat, params) => current.readHistory(chat, params),
     deleteMessagesById: (chat, ids, params) => current.deleteMessagesById(chat, ids, params),
     getPeerDialogs: chat => current.getPeerDialogs(chat),
     saveDraft: (chat, draft) => current.saveDraft(chat, draft),

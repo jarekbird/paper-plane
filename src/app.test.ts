@@ -8,7 +8,7 @@ import { display } from './glasses/display.ts'
 import type { Account, Who } from './messenger.ts'
 
 const settle = (ms = 500) => vi.advanceTimersByTimeAsync(ms)
-const SAMPLE_HOME = ['Sample chats', '> Anna (2)', 'Launch crew (1)', 'Glasses news']
+const SAMPLE_HOME = ['Sample chats', '> Anna (2)', '@ Launch crew (1)', 'Glasses news']
 const OFFLINE = ['Paper Plane', 'Cannot reach Telegram', 'Tap to try again']
 const NO_PICKS = ['Paper Plane', 'Pick your chats on the phone']
 const CONNECTING = ['Paper Plane', 'Connecting to Telegram…']

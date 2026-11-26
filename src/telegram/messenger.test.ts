@@ -19,6 +19,7 @@ function fakeClient() {
     { type: 'chat', id: -1005678, displayName: 'Glasses news', chatType: 'channel' },
   ]
   const unread = new Map<number, number>([[-1001234, 2]])
+  const mentions = new Map<number, number>([[-1001234, 1]])
   const messages: MessageLike[] = []
   const drafts = new Map<number, string>()
   const forwarded: string[] = []
@@ -66,6 +67,7 @@ function fakeClient() {
       const dialogs: DialogLike[] = peers.map(entry => ({
         peer: entry,
         unreadCount: unread.get(entry.id) ?? 0,
+        unreadMentionsCount: mentions.get(entry.id) ?? 0,
         lastMessage: of(entry.id).at(-1) ?? null,
         draftMessage: drafts.has(entry.id) ? { text: drafts.get(entry.id)! } : null,
       }))
@@ -81,7 +83,10 @@ function fakeClient() {
       losing = false
       throw new Error('the connection closed before the answer')
     },
-    readHistory: async chat => void unread.set(chat, 0),
+    readHistory: async (chat, { clearMentions }) => {
+      unread.set(chat, 0)
+      if (clearMentions) mentions.set(chat, 0)
+    },
     deleteMessagesById: async (chat, ids) => {
       for (const id of ids) {
         const at = messages.findIndex(message => message.chat.id === chat && message.id === id)
@@ -89,7 +94,13 @@ function fakeClient() {
       }
     },
     getPeerDialogs: async chat => [
-      { peer: peer(chat), unreadCount: 0, lastMessage: null, draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null },
+      {
+        peer: peer(chat),
+        unreadCount: 0,
+        unreadMentionsCount: 0,
+        lastMessage: null,
+        draftMessage: drafts.has(chat) ? { text: drafts.get(chat)! } : null,
+      },
     ],
     saveDraft: async (chat, draft) => void drafts.set(chat, draft.message),
     forwardMessagesById: async ({ fromChatId, messages: ids }) => {
@@ -162,6 +173,7 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
     messenger: messengerOver(fake.client, fake.asking),
     chat: '42',
     unreadChat: '-1001234',
+    mentionedChat: '-1001234',
     channel: '-1005678',
     saved: async () => fake.forwarded,
     sponsoredSeen: async () => fake.viewed.length,

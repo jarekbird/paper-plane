@@ -40,7 +40,8 @@ export class Inbox {
 
   picked(): Chat[] {
     const picks = this.picks()
-    return this.#chats.filter(chat => picks.includes(chat.id))
+    const picked = this.#chats.filter(chat => picks.includes(chat.id))
+    return [...picked.filter(chat => chat.unread > 0), ...picked.filter(chat => chat.unread === 0)]
   }
 
   chat(id: string): Chat | undefined {

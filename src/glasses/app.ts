@@ -111,7 +111,8 @@ const showable = (words: string) => {
   return /[\p{L}\p{N}]/u.test(shown) ? shown : ''
 }
 
-const label = (chat: Chat) => (chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title)
+const MENTIONED = '@ '
+const label = (chat: Chat) => `${chat.mentions > 0 ? MENTIONED : ''}${chat.unread > 0 ? `${chat.title} (${chat.unread})` : chat.title}`
 
 const line = (chat: Chat | undefined, message: Message) => {
   const text = message.mine ? `You: ${message.text}` : chat?.kind === 'group' ? `${message.from}: ${message.text}` : message.text

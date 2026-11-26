@@ -15,6 +15,7 @@ export interface Chat {
   title: string
   kind: ChatKind
   unread: number
+  mentions: number
   last: Message | null
 }
 
