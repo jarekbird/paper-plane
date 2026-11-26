@@ -23,7 +23,7 @@ import {
   type Timer,
   type VoiceOptions,
 } from 'earshot'
-import type { Inbox } from '../inbox.ts'
+import { hasNew, type Inbox } from '../inbox.ts'
 import type { Display } from './display.ts'
 import { instructed } from '../instruction.ts'
 import type { Chat, Message, Messenger, Sponsored, Writer } from '../messenger.ts'
@@ -430,7 +430,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     }
     const markRead = (entered: Lifetime) => {
       const newestId = messages?.at(-1)?.id ?? null
-      if (pending || failed || newestId === readUpTo || (inbox.chat(id)?.unread ?? 0) === 0) return
+      const chat = inbox.chat(id)
+      if (pending || failed || newestId === readUpTo || !chat || !hasNew(chat)) return
       readUpTo = newestId
       void entered.guard(messenger.read(id)).catch(() => {
         if (readUpTo === newestId) readUpTo = undefined
@@ -686,7 +687,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
   const unread = () =>
     inbox
       .picked()
-      .filter(chat => chat.unread > 0)
+      .filter(hasNew)
       .map(chat => chat.id)
       .sort()
   const markRead = async (ids: readonly string[]) => {

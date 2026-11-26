@@ -92,6 +92,7 @@ export interface DemoMessenger extends Messenger {
   drafts(): ReadonlyMap<string, string>
   trouble(next: Trouble | null): void
   loseAnswer(): void
+  readElsewhere(chat: string): void
   file(chat: string, folders: readonly Folder[]): void
 }
 
@@ -243,6 +244,10 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     drafts: () => drafts,
     file: (id, folders) => {
       find(id).folders = [...folders]
+      tell()
+    },
+    readElsewhere: id => {
+      find(id).unread = 0
       tell()
     },
     loseAnswer: () => {

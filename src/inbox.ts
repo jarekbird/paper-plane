@@ -41,7 +41,7 @@ export class Inbox {
   picked(): Chat[] {
     const picks = this.picks()
     const picked = this.#chats.filter(chat => picks.includes(chat.id) || chat.folders.some(folder => picks.includes(folderPick(folder.id))))
-    return [...picked.filter(chat => chat.unread > 0), ...picked.filter(chat => chat.unread === 0)]
+    return [...picked.filter(hasNew), ...picked.filter(chat => !hasNew(chat))]
   }
 
   folders(): { folder: Folder; chats: number }[] {
@@ -102,6 +102,8 @@ export class Inbox {
     for (const listener of [...this.#listeners]) listener()
   }
 }
+
+export const hasNew = (chat: Chat): boolean => chat.unread > 0 || chat.mentions > 0
 
 export const folderPick = (id: string): string => `folder:${id}`
 

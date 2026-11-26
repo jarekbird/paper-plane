@@ -71,6 +71,18 @@ describe('the list of chats', () => {
     expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew (1)', 'Sam'])
   })
 
+  it('clears a mention whose message was already read elsewhere, once its chat is opened, and counts it for "mark all read"', async () => {
+    const { fake, messenger, openFirst } = await world(['launch'])
+    messenger.readElsewhere('launch')
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> @ Launch crew'])
+    expect(fake.menuItems().map(item => item.name)).toContain('Mark all read')
+    await openFirst()
+    fake.double()
+    await settle()
+    expect(fake.lines()).toEqual(['Paper Plane', '> Launch crew'])
+  })
+
   it('lists the chats with something new first, and the others below in Telegram’s order', async () => {
     const { fake, messenger } = await world(['news', 'sam', 'launch', 'anna'])
     expect(fake.lines()).toEqual(['Paper Plane', '> Anna (2)', '@ Launch crew (1)', 'Glasses news', 'Sam'])
