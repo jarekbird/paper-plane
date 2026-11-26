@@ -42,9 +42,9 @@ This is a build in progress, during the hackathon week.
 
 - **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
   The voice relay is deployed, and both models were tried live (above).
-- **Tried on real Telegram, once (26 November):** signing in with number and code from the app in the simulator,
-  the list of chats (61 came back), and signing out. Sending, folders, mentions and channels have not been tried
-  there yet.
+- **Tried on real Telegram (26 November):** signing in with number and code from the app in the simulator, the
+  list of chats (61 came back), staying signed in over a restart, and signing out. Sending, folders, mentions and
+  channels have not been tried there yet.
 - **Google Calendar:** built and tried on the sample calendar. Never run against Google yet.
 - **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).

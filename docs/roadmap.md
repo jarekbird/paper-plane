@@ -19,7 +19,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 
 | #   | Feature                                                                                                    | State                    |
 | --- | ---------------------------------------------------------------------------------------------------------- | ------------------------ |
-| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; signed in on Telegram once |
+| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; tried on Telegram         |
 | 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | built, on samples        |
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | built, on samples        |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
@@ -45,8 +45,8 @@ Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
   has no Telegram and shows only the sample account.
 - `VITE_RELAY` is in the build (the Worker `paper-plane-relay` is deployed and holds its key): without it a hold on
   real glasses hears nothing.
-- A run on real Telegram, on Jarek's own account: signing in, the list of chats and signing out are done, once.
-  Sending is still to do, writing only to Saved Messages.
+- A run on real Telegram, on Jarek's own account: signing in, the list of chats, staying signed in over a restart
+  and signing out are done. Sending is still to do, writing only to Saved Messages.
 
 ## Not now
 
