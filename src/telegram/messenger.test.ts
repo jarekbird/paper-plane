@@ -63,6 +63,10 @@ function fakeClient() {
   add(peers[1], peers[1], 'Cy joined', true)
 
   const client: ClientLike<number> = {
+    folders: async () => [
+      { id: 2, title: 'Groups', has: dialog => dialog.peer.type === 'chat' },
+      { id: 3, title: 'Nobody', has: () => false },
+    ],
     iterDialogs: async function* () {
       const dialogs: DialogLike[] = peers.map(entry => ({
         peer: entry,
@@ -130,6 +134,7 @@ function fakeClient() {
       if (refused) throw refused
       yield* dialogs(params)
     },
+    folders: answering('folders', client.folders),
     getHistory: answering('getHistory', client.getHistory),
     sendText: answering('sendText', client.sendText),
     readHistory: answering('readHistory', client.readHistory),
@@ -174,6 +179,7 @@ messengerContract('the Telegram adapter, over a client that tells nothing about 
     chat: '42',
     unreadChat: '-1001234',
     mentionedChat: '-1001234',
+    folder: { title: 'Groups', chats: ['-1001234', '-1005678'] },
     channel: '-1005678',
     saved: async () => fake.forwarded,
     sponsoredSeen: async () => fake.viewed.length,

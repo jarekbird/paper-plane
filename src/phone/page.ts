@@ -1,7 +1,7 @@
 import type { Lifetime } from 'earshot'
 import type { Inbox } from '../inbox.ts'
 import type { Phrases } from '../phrases.ts'
-import { pickRows, setPicked } from './model.ts'
+import { folderRows, pickRows, setPicked } from './model.ts'
 import { whatLeaves, type Build } from './privacy.ts'
 import type { SignIn } from './signin.ts'
 
@@ -115,20 +115,37 @@ export function startPhone(life: Lifetime, root: HTMLElement, parts: PhoneParts)
   const drawChats = () => {
     chatRows.end()
     chatRows = life.child()
-    const list = element('ul')
-    for (const row of pickRows(inbox)) {
+    const row = (title: string, note: string, picked: boolean, fixed: boolean, pick: (picked: boolean) => void) => {
       const box = element('input')
       box.type = 'checkbox'
-      box.checked = row.picked
-      chatRows.listen(box, 'change', () => void setPicked(inbox, row.id, box.checked))
+      box.checked = picked
+      box.disabled = fixed
+      chatRows.listen(box, 'change', () => pick(box.checked))
       const label = element('label')
-      label.append(box, element('span', row.title), element('small', row.kind))
+      label.append(box, element('span', title), element('small', note))
       const item = element('li')
       item.append(label)
-      list.append(item)
+      return item
     }
+    const folders = element('ul')
+    for (const folder of folderRows(inbox))
+      folders.append(row(folder.title, folder.chats, folder.picked, false, picked => void setPicked(inbox, folder.pick, picked)))
+    const list = element('ul')
+    for (const chat of pickRows(inbox))
+      list.append(
+        row(chat.title, chat.through ? `In ${chat.through}` : chat.kind, chat.picked, chat.through !== null, picked => {
+          void setPicked(inbox, chat.id, picked)
+        }),
+      )
     chats.replaceChildren(
       element('h2', 'Chats on your glasses'),
+      ...(folders.childElementCount
+        ? [
+            element('p', 'A whole Telegram folder: every chat in it, also ones you add to it later.'),
+            folders,
+            element('p', 'Or chat by chat.'),
+          ]
+        : []),
       inbox.all().length ? list : element('p', inbox.problem ?? 'No chats yet.'),
     )
   }

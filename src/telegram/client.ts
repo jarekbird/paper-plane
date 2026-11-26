@@ -1,5 +1,5 @@
 import type { Lifetime } from 'earshot'
-import type { tl } from '@mtcute/core'
+import { Dialog, type tl } from '@mtcute/core'
 import { BaseTelegramClient, TelegramClient } from '@mtcute/core/client.js'
 import { randomLong } from '@mtcute/core/utils.js'
 import type { Account, Messenger } from '../messenger.ts'
@@ -17,7 +17,7 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
   const linked = new Set<Linked>()
   let current = make()
 
-  const live: AuthClientLike & ClientLike<tl.Long> = {
+  const live: AuthClientLike & ClientLike<tl.Long, Dialog> = {
     sendCode: params => current.sendCode(params),
     signIn: params => current.signIn(params),
     checkPassword: password => current.checkPassword(password),
@@ -34,6 +34,12 @@ export function telegram(life: Lifetime, app: TelegramApp, place: SessionPlace):
       for (const listener of heard) current.onUpdate.add(listener)
       for (const listener of linked) current.onConnectionState.add(listener)
       await old.destroy()
+    },
+    folders: async () => {
+      const { filters } = await current.getFolders()
+      return filters.flatMap(filter =>
+        filter._ === 'dialogFilterDefault' ? [] : [{ id: filter.id, title: filter.title.text, has: Dialog.filterFolder(filter) }],
+      )
     },
     iterDialogs: params => current.iterDialogs(params),
     getHistory: (chat, params) => current.getHistory(chat, params),

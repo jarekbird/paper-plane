@@ -1,9 +1,10 @@
 import { TroubleError, type Chat, type Messenger } from '../messenger.ts'
 import { sentBefore, signedOut, troubleOf, type Within } from './trouble.ts'
-import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type MessageLike, type SponsoredLike } from './map.ts'
+import { LIKE, sponsoredId, toChat, toMessage, type DialogLike, type FolderLike, type MessageLike, type SponsoredLike } from './map.ts'
 
-export interface ClientLike<Id> {
-  iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<DialogLike>
+export interface ClientLike<Id, D extends DialogLike = DialogLike> {
+  folders(): Promise<FolderLike<D>[]>
+  iterDialogs(params: { limit: number; archived: 'exclude' }): AsyncIterable<D>
   getHistory(chat: number, params: { limit: number }): Promise<MessageLike[]>
   randomId(): Id
   sendText(chat: number, text: string, params: { abortSignal: AbortSignal; randomId: Id }): Promise<MessageLike>
@@ -42,7 +43,10 @@ const DIALOGS = 100
 const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'history_read'])
 export const GRACE_MS = 3_000
 
-export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now = Date.now }: Asking): Messenger & { close(): void } {
+export function messengerOver<Id, D extends DialogLike = DialogLike>(
+  client: ClientLike<Id, D>,
+  { within, session, now = Date.now }: Asking,
+): Messenger & { close(): void } {
   const listeners = new Set<() => void>()
   const keeping = new Map<string, Promise<boolean>>()
   const ads = new Map<string, Uint8Array>()
@@ -90,10 +94,12 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
     },
     chats: () =>
       ask(async signal => {
+        const folders = await client.folders()
+        signal.throwIfAborted()
         const chats: Chat[] = []
         for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) {
           signal.throwIfAborted()
-          chats.push(toChat(dialog))
+          chats.push(toChat(dialog, folders))
         }
         return chats
       }),

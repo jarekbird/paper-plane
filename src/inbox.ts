@@ -1,5 +1,5 @@
 import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
-import type { Chat, Messenger } from './messenger.ts'
+import type { Chat, Folder, Messenger } from './messenger.ts'
 import { troubleWords } from './trouble.ts'
 
 export class Inbox {
@@ -40,8 +40,15 @@ export class Inbox {
 
   picked(): Chat[] {
     const picks = this.picks()
-    const picked = this.#chats.filter(chat => picks.includes(chat.id))
+    const picked = this.#chats.filter(chat => picks.includes(chat.id) || chat.folders.some(folder => picks.includes(folderPick(folder.id))))
     return [...picked.filter(chat => chat.unread > 0), ...picked.filter(chat => chat.unread === 0)]
+  }
+
+  folders(): { folder: Folder; chats: number }[] {
+    const found = new Map<string, { folder: Folder; chats: number }>()
+    for (const chat of this.#chats)
+      for (const folder of chat.folders) found.set(folder.id, { folder, chats: (found.get(folder.id)?.chats ?? 0) + 1 })
+    return [...found.values()]
   }
 
   chat(id: string): Chat | undefined {
@@ -95,6 +102,8 @@ export class Inbox {
     for (const listener of [...this.#listeners]) listener()
   }
 }
+
+export const folderPick = (id: string): string => `folder:${id}`
 
 function parsePicks(saved: string): string[] {
   try {

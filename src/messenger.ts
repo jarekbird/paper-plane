@@ -10,10 +10,16 @@ export interface Message {
   liked: boolean
 }
 
+export interface Folder {
+  id: string
+  title: string
+}
+
 export interface Chat {
   id: string
   title: string
   kind: ChatKind
+  folders: Folder[]
   unread: number
   mentions: number
   last: Message | null

@@ -6,6 +6,7 @@ export interface ContractWorld {
   chat: string
   unreadChat: string
   mentionedChat: string
+  folder: { title: string; chats: string[] }
   channel: string
   saved(): Promise<string[]>
   sponsoredSeen(): Promise<number>
@@ -58,6 +59,16 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       expect(await unread()).toBeGreaterThan(0)
       await messenger.read(unreadChat)
       expect(await unread()).toBe(0)
+    })
+
+    it('says which of the user’s Telegram folders each chat is in, by a name and an id that stays', async () => {
+      const { messenger, folder } = await make()
+      const chats = await messenger.chats()
+      const inFolder = chats.filter(chat => chat.folders.some(one => one.title === folder.title))
+      expect(inFolder.map(chat => chat.id).sort()).toEqual([...folder.chats].sort())
+      const ids = new Set(inFolder.flatMap(chat => chat.folders.filter(one => one.title === folder.title).map(one => one.id)))
+      expect(ids.size).toBe(1)
+      expect([...ids][0].length).toBeGreaterThan(0)
     })
 
     it('says which chat has new messages that mention the user, until that chat is marked read', async () => {

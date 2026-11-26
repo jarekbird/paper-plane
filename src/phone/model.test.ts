@@ -2,7 +2,7 @@ import { createStore, Lifetime, memoryPlace } from 'earshot'
 import { describe, expect, it } from 'vitest'
 import { demoMessenger } from '../demo/messenger.ts'
 import { Inbox } from '../inbox.ts'
-import { pickRows, setPicked } from './model.ts'
+import { folderRows, pickRows, setPicked } from './model.ts'
 
 async function world() {
   const store = createStore([memoryPlace()])
@@ -43,5 +43,63 @@ describe('picking chats on the phone', () => {
   it('knows a first launch, when nothing was ever picked', async () => {
     const { inbox } = await world()
     expect(inbox.fresh).toBe(true)
+  })
+})
+
+describe('picking a whole folder on the phone', () => {
+  it('lists the account’s Telegram folders with how many chats each has', async () => {
+    const { inbox } = await world()
+    expect(folderRows(inbox).map(row => [row.title, row.chats, row.picked])).toEqual([
+      ['Friends', '2 chats', false],
+      ['Work', '2 chats', false],
+    ])
+  })
+
+  it('puts every chat of a picked folder on the glasses, and takes them off with it', async () => {
+    const { inbox } = await world()
+    const work = folderRows(inbox).find(row => row.title === 'Work')!
+    await setPicked(inbox, work.pick, true)
+    expect(inbox.picked().map(chat => chat.title)).toEqual(['Launch crew', 'Glasses news'])
+    await setPicked(inbox, work.pick, false)
+    expect(inbox.picked()).toEqual([])
+  })
+
+  it('shows a chat that is on the glasses through its folder as picked, says through which, and keeps it apart from a pick of its own', async () => {
+    const { inbox } = await world()
+    await setPicked(inbox, 'sam', true)
+    await setPicked(inbox, folderRows(inbox).find(row => row.title === 'Work')!.pick, true)
+    expect(pickRows(inbox).map(row => [row.title, row.picked, row.through])).toEqual([
+      ['Anna', false, null],
+      ['Launch crew', true, 'Work'],
+      ['Glasses news', true, 'Work'],
+      ['Sam', true, null],
+    ])
+  })
+
+  it('follows the folder: a chat the user adds to it in Telegram comes onto the glasses, and one taken out goes', async () => {
+    const { inbox, messenger } = await world()
+    await setPicked(inbox, folderRows(inbox).find(row => row.title === 'Work')!.pick, true)
+    messenger.file('sam', [{ id: 'work', title: 'Work' }])
+    messenger.file('news', [])
+    await inbox.refresh()
+    expect(
+      inbox
+        .picked()
+        .map(chat => chat.title)
+        .sort(),
+    ).toEqual(['Launch crew', 'Sam'])
+  })
+
+  it('remembers a picked folder for the next launch', async () => {
+    const { inbox, store, messenger } = await world()
+    await setPicked(inbox, folderRows(inbox).find(row => row.title === 'Friends')!.pick, true)
+    const next = new Inbox(new Lifetime(), messenger, store)
+    await next.start()
+    expect(
+      next
+        .picked()
+        .map(chat => chat.title)
+        .sort(),
+    ).toEqual(['Anna', 'Sam'])
   })
 })

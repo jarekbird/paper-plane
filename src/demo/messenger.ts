@@ -1,4 +1,13 @@
-import { TroubleError, type Chat, type ChatKind, type Message, type Messenger, type Sponsored, type Trouble } from '../messenger.ts'
+import {
+  TroubleError,
+  type Chat,
+  type ChatKind,
+  type Folder,
+  type Message,
+  type Messenger,
+  type Sponsored,
+  type Trouble,
+} from '../messenger.ts'
 
 interface DemoChat {
   id: string
@@ -6,17 +15,29 @@ interface DemoChat {
   kind: ChatKind
   unread: number
   mentions: number
+  folders: Folder[]
   messages: Message[]
 }
 
 const MINUTE = 60_000
 
-const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; mentions?: number; lines: [from: string, text: string][] }[] = [
+const FRIENDS: Folder = { id: 'friends', title: 'Friends' }
+const WORK: Folder = { id: 'work', title: 'Work' }
+const SCRIPT: {
+  id: string
+  title: string
+  kind: ChatKind
+  unread: number
+  mentions?: number
+  folders: Folder[]
+  lines: [from: string, text: string][]
+}[] = [
   {
     id: 'anna',
     title: 'Anna',
     kind: 'person',
     unread: 2,
+    folders: [FRIENDS],
     lines: [
       ['You', 'Running the demo at four.'],
       ['Anna', 'Nice. Are we still on for lunch first?'],
@@ -29,6 +50,7 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; menti
     kind: 'group',
     unread: 1,
     mentions: 1,
+    folders: [WORK],
     lines: [
       ['Ben', 'Build is green.'],
       ['You', 'Shipping after the review.'],
@@ -40,6 +62,7 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; menti
     title: 'Glasses news',
     kind: 'channel',
     unread: 0,
+    folders: [WORK],
     lines: [['Glasses news', 'Heads Up build week has started.']],
   },
   {
@@ -47,6 +70,7 @@ const SCRIPT: { id: string; title: string; kind: ChatKind; unread: number; menti
     title: 'Sam',
     kind: 'person',
     unread: 0,
+    folders: [FRIENDS],
     lines: [['Sam', 'Thanks for yesterday.']],
   },
 ]
@@ -68,6 +92,7 @@ export interface DemoMessenger extends Messenger {
   drafts(): ReadonlyMap<string, string>
   trouble(next: Trouble | null): void
   loseAnswer(): void
+  file(chat: string, folders: readonly Folder[]): void
 }
 
 export function demoMessenger(now: () => number = Date.now): DemoMessenger {
@@ -96,6 +121,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     kind: entry.kind,
     unread: entry.unread,
     mentions: entry.mentions ?? 0,
+    folders: entry.folders,
     messages: entry.lines.map(([from, text], index) => message(entry.id, from, text, started - (entry.lines.length - index) * MINUTE)),
   }))
   const reach = () => {
@@ -120,6 +146,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
         kind: chat.kind,
         unread: chat.unread,
         mentions: chat.mentions,
+        folders: chat.folders,
         last: chat.messages.at(-1) ?? null,
       }))
     },
@@ -214,6 +241,10 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     sent: () => outbox,
     saved: () => kept,
     drafts: () => drafts,
+    file: (id, folders) => {
+      find(id).folders = [...folders]
+      tell()
+    },
     loseAnswer: () => {
       losing = true
     },

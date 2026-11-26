@@ -20,7 +20,7 @@ bot or a server the user hosts. Paper Plane stands out by:
 | #   | Feature                                                                                                    | State                    |
 | --- | ---------------------------------------------------------------------------------------------------------- | ------------------------ |
 | 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; never run on Telegram |
-| 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | chats built, on samples  |
+| 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | built, on samples        |
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | built, on samples        |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
 | 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |

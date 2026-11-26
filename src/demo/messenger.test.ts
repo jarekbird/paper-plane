@@ -9,6 +9,7 @@ messengerContract('the sample account', async () => {
     chat: 'sam',
     unreadChat: 'anna',
     mentionedChat: 'launch',
+    folder: { title: 'Work', chats: ['launch', 'news'] },
     channel: 'news',
     saved: async () => messenger.saved().map(message => message.text),
     sponsoredSeen: async () => messenger.seenSponsored().length,
