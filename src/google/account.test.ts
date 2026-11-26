@@ -1,6 +1,7 @@
-import { Lifetime } from 'earshot'
+import { Lifetime, memoryPlace } from 'earshot'
 import { describe, expect, it } from 'vitest'
 import { calendarAccountContract } from '../calendar-account.contract.ts'
+import { storeOver } from '../store.ts'
 import { GoogleEnded, googleAccount, type GooglePlace } from './account.ts'
 import { googleSide } from './testing.ts'
 
@@ -346,5 +347,55 @@ describe('the Google sign-in on the phone', () => {
     expect(made.account.signIn()).toBe(before)
     expect((await made.account.token(before, live())).value).toMatch(/^access-/)
     expect(made.side.revoked).toEqual([])
+  })
+
+  it('A5: is not connected when the user left while the sign-in was being written: the phone is put back as it was, and Google ends that sign-in', async () => {
+    const made = world()
+    const code = made.side.consent(await made.account.begin())
+    const save = made.place.save
+    let release: (() => void) | null = null
+    made.place.save = async next => {
+      if (next !== null && release === null) await new Promise<void>(resolve => (release = resolve))
+      return save(next)
+    }
+    let told = 0
+    made.account.onChange(() => told++)
+    const leaving = new AbortController()
+    const finishing = made.account.finish(code, leaving.signal).catch(() => 'left')
+    await until(() => release !== null)
+    leaving.abort()
+    release!()
+    expect(await finishing).toBe('left')
+    expect(made.kept()).toBeNull()
+    expect(await made.account.known()).toBe(false)
+    expect(told).toBe(0)
+    expect(made.side.revoked).toHaveLength(1)
+  })
+
+  it('A8: counts as disconnected, and tells its listeners, when one of the phone’s two copies could not be written but the sign-in can no longer be read', async () => {
+    const side = googleSide()
+    const even = memoryPlace()
+    const web = memoryPlace()
+    let webWrites = true
+    const { google } = storeOver([
+      even,
+      { read: key => web.read(key), write: (key, text) => (webWrites ? web.write(key, text) : Promise.reject(new Error('unwritable'))) },
+    ])
+    const account = googleAccount(new Lifetime(), {
+      relay: 'https://relay.example',
+      place: google,
+      ask: side.ask,
+      now: () => 1_800_000_000_000,
+    })
+    await account.finish(side.consent(await account.begin()), live())
+    const before = account.signIn()
+    let told = 0
+    account.onChange(() => told++)
+    webWrites = false
+    await account.signOut()
+    expect(await account.known()).toBe(false)
+    expect(told).toBe(1)
+    expect(account.signIn()).not.toBe(before)
+    await expect(account.token(before, live())).rejects.toBeInstanceOf(GoogleEnded)
   })
 })

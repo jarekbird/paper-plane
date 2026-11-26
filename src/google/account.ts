@@ -71,12 +71,31 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     ask(`${relay}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal })
   const current = () => inTurn(async () => ({ have: parsed(await life.guard(place.load())), of: signIn }))
 
+  const holds = async (wanted: string | null): Promise<boolean> => {
+    try {
+      return (await life.guard(place.load())) === wanted
+    } catch (error) {
+      if (error instanceof LifetimeEnded) throw error
+      return false
+    }
+  }
+
+  const stored = async (next: string | null): Promise<boolean> => {
+    try {
+      await life.guard(place.save(next))
+      return true
+    } catch (error) {
+      if (error instanceof LifetimeEnded) throw error
+      return life.guard(holds(next))
+    }
+  }
+
   const forget = async (of: number): Promise<Kept | null> => {
     const had = await life.guard(
       inTurn(async () => {
         if (of !== signIn) return null
         const have = parsed(await life.guard(place.load()))
-        await life.guard(place.save(null))
+        if (!(await life.guard(stored(null)))) throw new Error('The sign-in could not be removed from this phone')
         signIn++
         return have
       }),
@@ -101,7 +120,8 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     const kept = await life.guard(
       inTurn(async () => {
         if (of !== signIn) return false
-        await life.guard(place.save(JSON.stringify({ ...have, access, until: now() + (Number(given.expires) || 0) * 1000 })))
+        const next = JSON.stringify({ ...have, access, until: now() + (Number(given.expires) || 0) * 1000 })
+        if (!(await life.guard(stored(next)))) throw new Error('The renewed sign-in could not be kept on this phone')
         return true
       }),
     )
@@ -147,12 +167,10 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       const kept = await life.guard(
         inTurn(async () => {
           if (signal.aborted) return 'left'
-          try {
-            await life.guard(place.save(JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })))
-          } catch (error) {
-            if (error instanceof LifetimeEnded) throw error
-            return 'unkept'
-          }
+          const before = await life.guard(place.load())
+          const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
+          if (!(await life.guard(stored(next)))) return 'unkept'
+          if (signal.aborted && (await life.guard(stored(before)))) return 'left'
           signIn++
           return 'kept'
         }),
