@@ -92,7 +92,8 @@ Before filming:
 Shots that need a real Telegram sign-in: 1:55–2:10 (the draft on the phone), the incoming message at 0:00, and
 "Cannot reach Telegram" by flight mode at 2:25. On the sample account: film "Kept as a draft" on the glasses
 instead and drop the phone shot; and for "Cannot reach Telegram" open the app with `#trouble=unreachable`
-(`http://127.0.0.1:5183/#trouble=unreachable&say=See you at noon` in the simulator), where the sample chats lose
+(`http://127.0.0.1:5183/#account=sample&trouble=unreachable&say=See you at noon` in the simulator; `account=sample`
+is needed in a build that has Telegram in it, where trouble is never staged on your own chats), where the sample chats lose
 Telegram eight seconds after launch and have it back at thirty: open a chat and say the reply first, then tap to
 send inside that window.
 

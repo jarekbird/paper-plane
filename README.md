@@ -60,8 +60,9 @@ npx evenhub-simulator http://127.0.0.1:5183           # Even's simulator, in a s
 In the simulator: swipe to move, tap to open a chat, double tap to go back. To try a spoken reply without a microphone
 or any service, open `http://127.0.0.1:5183/#say=See you at noon` instead: each hold then "hears" that sentence.
 To see what the glasses say when Telegram is in trouble, add `#trouble=unreachable` or `#trouble=wait`: the sample
-chats lose Telegram eight seconds after launch and have it back at thirty. `#account=sample&trouble=ended` starts
-signed in to the sample sign-in and ends it from "another device".
+chats lose Telegram eight seconds after launch and have it back at thirty. In a build with Telegram in it, add
+`account=sample` too: trouble is never staged on your own chats. `#account=sample&trouble=ended` starts signed in
+to the sample sign-in and ends it from "another device".
 
 ```sh
 npm run check   # format, lint, architecture rules, types, tests, build and Even Hub's store rules
