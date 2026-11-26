@@ -3,7 +3,8 @@ import type { Calendar, Meeting } from '../messenger.ts'
 import { GoogleEnded, type GoogleAccount } from './account.ts'
 
 const EVENTS = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
-const LOOK_AHEAD = 10
+const PAGE = 50
+const PAGES = 5
 
 interface EventLike {
   id?: unknown
@@ -22,25 +23,37 @@ function meetingOf(event: EventLike): Meeting | null {
 
 export function calendarOver(life: Lifetime, account: GoogleAccount, ask: typeof fetch = fetch): Calendar {
   const call = async (url: string, init: RequestInit, signal: AbortSignal): Promise<Response> => {
-    const token = await life.guard(account.token(signal))
-    const response = await life.guard(ask(url, { ...init, signal, headers: { ...init.headers, authorization: `Bearer ${token}` } }))
-    if (response.status === 401) throw new GoogleEnded()
-    return response
+    const asked = (key: string) => ask(url, { ...init, signal, headers: { ...init.headers, authorization: `Bearer ${key}` } })
+    const key = await life.guard(account.token(signal))
+    const first = await life.guard(asked(key))
+    if (first.status !== 401) return first
+    const second = await life.guard(asked(await life.guard(account.refused(key, signal))))
+    if (second.status !== 401) return second
+    await life.guard(account.drop())
+    throw new GoogleEnded()
   }
 
   return {
     next: async (from, signal) => {
-      const query = new URLSearchParams({
-        timeMin: new Date(from).toISOString(),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        maxResults: String(LOOK_AHEAD),
-        fields: 'items(id,summary,status,start/dateTime,end/dateTime)',
-      })
-      const response = await life.guard(call(`${EVENTS}?${query}`, { method: 'GET' }, signal))
-      if (!response.ok) throw new Error('The calendar did not answer')
-      const { items } = (await life.guard(response.json())) as { items?: EventLike[] }
-      return (items ?? []).flatMap(event => meetingOf(event) ?? []).find(meeting => meeting.end > from) ?? null
+      let page: string | null = null
+      for (let turn = 0; turn < PAGES; turn++) {
+        const query = new URLSearchParams({
+          timeMin: new Date(from).toISOString(),
+          singleEvents: 'true',
+          orderBy: 'startTime',
+          maxResults: String(PAGE),
+          fields: 'nextPageToken,items(id,summary,status,start/dateTime,end/dateTime)',
+          ...(page ? { pageToken: page } : {}),
+        })
+        const response = await life.guard(call(`${EVENTS}?${query}`, { method: 'GET' }, signal))
+        if (!response.ok) throw new Error('The calendar did not answer')
+        const listed = (await life.guard(response.json())) as { items?: EventLike[]; nextPageToken?: unknown }
+        const found = (listed.items ?? []).flatMap(event => meetingOf(event) ?? []).find(meeting => meeting.end > from)
+        if (found) return found
+        if (typeof listed.nextPageToken !== 'string') return null
+        page = listed.nextPageToken
+      }
+      return null
     },
     add: async (meeting, signal) => {
       signal.throwIfAborted()

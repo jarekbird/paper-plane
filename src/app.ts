@@ -84,7 +84,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       phrases,
       ...(hearing ? { hearing } : {}),
       ...(writer ? { writer } : {}),
-      ...(calendar && agenda ? { calendar, agenda, sampleMeetings: calendar === calendars?.sample } : {}),
+      ...(calendar && agenda ? { calendar, agenda } : {}),
     })
     if (ended && !who) shell.notice(ENDED)
     phone?.(current, { inbox: opened, phrases, signIn, connect, note: NOTES[scope], build })

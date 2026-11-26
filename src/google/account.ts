@@ -1,5 +1,6 @@
 import type { Lifetime } from 'earshot'
 import type { CalendarAccount } from '../messenger.ts'
+import { turns } from '../turns.ts'
 
 export interface GooglePlace {
   load(): Promise<string | null>
@@ -15,6 +16,8 @@ export interface GoogleParts {
 
 export interface GoogleAccount extends CalendarAccount {
   token(signal: AbortSignal): Promise<string>
+  refused(key: string, signal: AbortSignal): Promise<string>
+  drop(): Promise<void>
 }
 
 interface Kept {
@@ -50,21 +53,68 @@ function parsed(text: string | null): Kept | null {
 
 export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now = Date.now }: GoogleParts): GoogleAccount {
   if (new URL(relay).protocol !== 'https:') throw new Error('The relay must be an https address')
+  const inTurn = turns(life)
   const listeners = new Set<() => void>()
   let verifier: string | null = null
+  let signIn = 0
+  let renewing: { of: number; key: Promise<string> } | null = null
   const tell = () => {
     for (const told of [...listeners]) told()
   }
   const post = (path: string, body: unknown, signal: AbortSignal) =>
     ask(`${relay}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal })
-  const kept = async () => parsed(await life.guard(place.load()))
-  const keep = async (next: Kept | null) => {
-    await life.guard(place.save(next === null ? null : JSON.stringify(next)))
-    tell()
+  const current = () => inTurn(async () => ({ have: parsed(await life.guard(place.load())), of: signIn }))
+
+  const forget = async (of: number): Promise<Kept | null> => {
+    const had = await life.guard(
+      inTurn(async () => {
+        if (of !== signIn) return null
+        const have = parsed(await life.guard(place.load()))
+        signIn++
+        await life.guard(place.save(null))
+        return have
+      }),
+    )
+    if (had) tell()
+    return had
+  }
+
+  const renew = async (have: Kept, of: number, signal: AbortSignal): Promise<string> => {
+    const response = await life.guard(post('/google/refresh', { refresh: have.refresh }, signal))
+    if (response.status === 401) {
+      await life.guard(forget(of))
+      throw new GoogleEnded()
+    }
+    if (!response.ok) throw new Error('The sign-in could not be renewed')
+    const given = (await life.guard(response.json())) as { access?: unknown; expires?: unknown }
+    const access = given.access
+    if (typeof access !== 'string') throw new Error('The sign-in could not be renewed')
+    const kept = await life.guard(
+      inTurn(async () => {
+        if (of !== signIn) return false
+        await life.guard(place.save(JSON.stringify({ ...have, access, until: now() + (Number(given.expires) || 0) * 1000 })))
+        return true
+      }),
+    )
+    if (!kept) throw new GoogleEnded()
+    return access
+  }
+
+  const renewed = (have: Kept, of: number, signal: AbortSignal): Promise<string> => {
+    if (renewing?.of === of) return renewing.key
+    const once = async () => {
+      try {
+        return await life.guard(renew(have, of, signal))
+      } finally {
+        if (renewing?.of === of) renewing = null
+      }
+    }
+    renewing = { of, key: once() }
+    return renewing.key
   }
 
   return {
-    known: async () => (await life.guard(kept())) !== null,
+    known: async () => (await life.guard(current())).have !== null,
     begin: async () => {
       const secret = url64(crypto.getRandomValues(new Uint8Array(32)))
       const hash = await life.guard(crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret)))
@@ -74,6 +124,7 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     finish: async (code, signal) => {
       const secret = verifier
       if (secret === null) return false
+      signal.throwIfAborted()
       const response = await life.guard(post('/google/pickup', { verifier: secret, code: code.replace(/\D/g, '') }, signal))
       if (response.status === 403 || response.status === 404) {
         if (verifier === secret) verifier = null
@@ -81,31 +132,37 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       }
       if (!response.ok) throw new Error('The sign-in could not be picked up')
       const given = (await life.guard(response.json())) as { refresh?: unknown; access?: unknown; expires?: unknown }
-      if (typeof given.refresh !== 'string' || typeof given.access !== 'string') throw new Error('The sign-in could not be picked up')
+      const { refresh, access } = given
+      if (typeof refresh !== 'string' || typeof access !== 'string') throw new Error('The sign-in could not be picked up')
       if (verifier === secret) verifier = null
-      await life.guard(keep({ refresh: given.refresh, access: given.access, until: now() + (Number(given.expires) || 0) * 1000 }))
+      await life.guard(
+        inTurn(async () => {
+          signIn++
+          await life.guard(place.save(JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })))
+        }),
+      )
+      tell()
       return true
     },
     token: async signal => {
-      const have = await life.guard(kept())
+      const { have, of } = await life.guard(current())
       if (have === null) throw new GoogleEnded()
       if (have.until - now() > EARLY_MS) return have.access
-      const response = await life.guard(post('/google/refresh', { refresh: have.refresh }, signal))
-      if (response.status === 401) {
-        await life.guard(keep(null))
-        throw new GoogleEnded()
-      }
-      if (!response.ok) throw new Error('The sign-in could not be renewed')
-      const given = (await life.guard(response.json())) as { access?: unknown; expires?: unknown }
-      if (typeof given.access !== 'string') throw new Error('The sign-in could not be renewed')
-      await life.guard(place.save(JSON.stringify({ ...have, access: given.access, until: now() + (Number(given.expires) || 0) * 1000 })))
-      return given.access
+      return life.guard(renewed(have, of, signal))
+    },
+    refused: async (key, signal) => {
+      const { have, of } = await life.guard(current())
+      if (have === null) throw new GoogleEnded()
+      if (have.access !== key) return have.access
+      return life.guard(renewed(have, of, signal))
+    },
+    drop: async () => {
+      await life.guard(forget(signIn))
     },
     signOut: async () => {
-      const have = await life.guard(kept())
-      await life.guard(keep(null))
-      if (have === null) return
-      const form = new URLSearchParams({ token: have.refresh })
+      const had = await life.guard(forget(signIn))
+      if (had === null) return
+      const form = new URLSearchParams({ token: had.refresh })
       await life.guard(ask(REVOKE, { method: 'POST', body: form, signal: life.signal }).catch(() => null))
     },
     onChange: told => {

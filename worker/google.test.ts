@@ -177,6 +177,22 @@ describe('signing in to Google through the Worker', () => {
     expect(made.kv.kept.size).toBe(0)
   })
 
+  it.each([
+    ['cannot be reached', () => Promise.reject(new Error('network'))],
+    ['is in trouble itself', () => Response.json({ error: 'backend_error' }, { status: 503 })],
+    ['asks to slow down', () => Response.json({ error: 'rate_limited' }, { status: 429 })],
+    ['refuses for another reason', () => Response.json({ error: 'invalid_client' }, { status: 401 })],
+  ] as [string, () => Response | Promise<Response>][])(
+    'does not call the sign-in ended when Google %s: the phone keeps it and tries again later',
+    async (_why, answer) => {
+      const made = world()
+      made.google(answer as () => Response)
+      const response = (await made.post('/google/refresh', { refresh: 'refresh-1' }))!
+      expect(response.status).toBe(502)
+      expect(await response.text()).not.toContain(SECRET)
+    },
+  )
+
   it('says so when Google no longer renews the sign-in, without Google’s own words', async () => {
     const made = world()
     made.google(() => Response.json({ error: 'invalid_grant', error_description: 'Token has been expired or revoked.' }, { status: 400 }))

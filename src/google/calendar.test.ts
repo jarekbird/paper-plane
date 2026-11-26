@@ -59,10 +59,39 @@ describe('Google Calendar', () => {
     expect(await (await world()).calendar.next(NOW, live())).toBeNull()
   })
 
-  it('says the sign-in has ended when Google refuses the key, so the app can hide the calendar', async () => {
-    const { calendar, side } = await world()
+  it('renews its key and asks again when Google refuses the key it has, so one stale key costs the user nothing', async () => {
+    const { calendar, side, account } = await world()
+    side.put({ id: 'plain', summary: 'Standup', start: { dateTime: '2026-11-26T18:00:00Z' }, end: { dateTime: '2026-11-26T18:30:00Z' } })
     side.expire()
+    expect((await calendar.next(NOW, live()))?.title).toBe('Standup')
+    expect(await account.known()).toBe(true)
+  })
+
+  it('A8: forgets the sign-in and tells its listeners when Google has ended it, so the app takes the calendar off the glasses', async () => {
+    const { calendar, side, account } = await world()
+    let told = 0
+    account.onChange(() => told++)
+    side.end()
     await expect(calendar.next(NOW, live())).rejects.toBeInstanceOf(GoogleEnded)
+    expect(await account.known()).toBe(false)
+    expect(told).toBe(1)
+  })
+
+  it('finds the next meeting with a time behind any number of all-day entries, reading on page by page', async () => {
+    const { calendar, side } = await world()
+    for (let day = 0; day < 120; day++)
+      side.put({ id: `day-${day}`, summary: 'Holiday', start: { date: '2026-11-26' }, end: { date: '2026-11-28' } })
+    side.put({ id: 'timed', summary: 'Standup', start: { dateTime: '2026-11-26T18:00:00Z' }, end: { dateTime: '2026-11-26T18:30:00Z' } })
+    expect((await calendar.next(NOW, live()))?.title).toBe('Standup')
+    expect(side.asked.filter(call => call.method === 'GET').length).toBe(3)
+  })
+
+  it('stops reading pages at some point, and then has no next meeting, rather than reading a whole calendar', async () => {
+    const { calendar, side } = await world()
+    for (let day = 0; day < 400; day++)
+      side.put({ id: `day-${day}`, summary: 'Holiday', start: { date: '2026-11-26' }, end: { date: '2026-11-28' } })
+    expect(await calendar.next(NOW, live())).toBeNull()
+    expect(side.asked.filter(call => call.method === 'GET').length).toBe(5)
   })
 
   it('A2: asks only Google’s calendar for the calendar', async () => {

@@ -308,7 +308,7 @@ describe('the calendar', () => {
 
   it('is the sample calendar with the sample chats, so the next meeting shows without any sign-in', async () => {
     const { fake } = await world({ calendar: 'sample only' })
-    expect(fake.lines()[0]).toMatch(/^Sample: .* Design review$/)
+    expect(fake.lines()[0]).toMatch(/^Sample chats, next .* Design review$/)
   })
 
   it('A8: is not on the glasses with the user’s own chats until Google is connected', async () => {
@@ -326,10 +326,10 @@ describe('the calendar', () => {
     expect(made.fake.lines()).toEqual(NO_PICKS)
   })
 
-  it('is the user’s own calendar, not the sample one, once Google is connected, also over the sample chats', async () => {
+  it('still says the chats are samples when Google is connected and Telegram is not', async () => {
     const made = await world({ calendar: 'connected' })
     expect(made.app.scope()).toBe('sample')
-    expect(made.fake.lines()[0]).toMatch(/^Next: .* Design review$/)
+    expect(made.fake.lines()[0]).toMatch(/^Sample chats, next .* Design review$/)
     expect(made.app.connect!.view().step).toBe('on')
   })
 

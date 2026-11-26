@@ -54,15 +54,17 @@ async function sent(request: Request): Promise<Record<string, unknown> | null> {
   }
 }
 
-async function tokens(env: Required<GoogleEnv>, grant: Record<string, string>): Promise<Record<string, unknown> | null> {
+async function tokens(env: Required<GoogleEnv>, grant: Record<string, string>): Promise<Record<string, unknown> | 'refused' | 'unreached'> {
   const response = await fetch(TOKEN, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, ...grant }),
   }).catch(() => null)
-  if (!response?.ok) return null
+  if (!response) return 'unreached'
   const answer: unknown = await response.json().catch(() => null)
-  return answer && typeof answer === 'object' ? (answer as Record<string, unknown>) : null
+  const given = answer && typeof answer === 'object' ? (answer as Record<string, unknown>) : null
+  if (response.ok) return given ?? 'unreached'
+  return response.status === 400 && given?.error === 'invalid_grant' ? 'refused' : 'unreached'
 }
 
 export async function google(request: Request, env: GoogleEnv): Promise<Response | null> {
@@ -94,7 +96,8 @@ export async function google(request: Request, env: GoogleEnv): Promise<Response
     const code = url.searchParams.get('code') ?? ''
     if (!PAIR.test(pair) || !code) return NOT_CONNECTED()
     const given = await tokens(set, { grant_type: 'authorization_code', code, redirect_uri: back })
-    if (typeof given?.refresh_token !== 'string' || typeof given.access_token !== 'string') return NOT_CONNECTED()
+    if (typeof given === 'string' || typeof given.refresh_token !== 'string' || typeof given.access_token !== 'string')
+      return NOT_CONNECTED()
     const typed = typedCode()
     await PAIRS.put(
       pair,
@@ -139,7 +142,8 @@ export async function google(request: Request, env: GoogleEnv): Promise<Response
   if (url.pathname === '/google/refresh') {
     if (typeof body.refresh !== 'string' || body.refresh.length > 2048) return json(400, { error: 'Not a sign-in' })
     const given = await tokens(set, { grant_type: 'refresh_token', refresh_token: body.refresh })
-    if (typeof given?.access_token !== 'string') return json(401, { error: 'Google did not renew the sign-in' })
+    if (given === 'refused') return json(401, { error: 'Google has ended the sign-in' })
+    if (given === 'unreached' || typeof given.access_token !== 'string') return json(502, { error: 'Google did not answer' })
     return json(200, { access: given.access_token, expires: Number(given.expires_in) || 0 })
   }
   return json(404, { error: 'No such call' })

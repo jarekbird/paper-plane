@@ -17,7 +17,7 @@ const tone = (ms: number) => new Uint8Array(new Int16Array((ms / 1000) * SAMPLE_
 interface Options {
   said?: string[]
   calendar?: boolean
-  sampleMeetings?: boolean
+  sampleChats?: boolean
   picks?: string[]
   wrap?: (calendar: Calendar) => Calendar
   model?: NavigatorModel
@@ -40,7 +40,7 @@ async function world(options: Options = {}) {
     messenger,
     phrases: new Phrases(store),
     hearing: { transcribe: scriptedSpeech(options.said ?? []), ...(options.model ? { model: options.model } : {}) },
-    ...(options.sampleMeetings ? { title: 'Sample chats', sampleMeetings: true } : {}),
+    ...(options.sampleChats ? { title: 'Sample chats' } : {}),
     ...(calendar ? { calendar } : {}),
     ...(agenda ? { agenda } : {}),
   })
@@ -92,9 +92,12 @@ describe('the next meeting, on the list of chats', () => {
     expect(fake.lines()[0]).toBe('Next: Tomorrow 9:20 AM Standup')
   })
 
-  it('keeps saying these are samples on the sample account', async () => {
-    const { fake } = await world({ sampleMeetings: true })
-    expect(fake.lines()[0]).toBe('Sample: 11 AM Design review')
+  it('keeps saying that the chats are samples, whichever calendar the meeting is from', async () => {
+    const { fake } = await world({ sampleChats: true })
+    expect(fake.lines()[0]).toBe('Sample chats, next 11 AM Design review')
+    vi.setSystemTime(NOW + 2 * 3_600_000)
+    await settle(60_000)
+    expect(fake.lines()[0]).toBe('Sample chats, now Design review')
   })
 
   it('A8: is not there without a calendar, and the list is as it was', async () => {

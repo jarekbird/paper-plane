@@ -94,6 +94,7 @@ flowchart LR
   src_account_contract_ts["src/account.contract.ts"]
   src_agenda_ts["src/agenda.ts"]
   src_app_ts["src/app.ts"]
+  src_calendar_account_contract_ts["src/calendar-account.contract.ts"]
   src_calendar_contract_ts["src/calendar.contract.ts"]
   src_demo["src/demo"]
   src_glasses["src/glasses"]
@@ -111,6 +112,7 @@ flowchart LR
   src_store_ts["src/store.ts"]
   src_telegram["src/telegram"]
   src_trouble_ts["src/trouble.ts"]
+  src_turns_ts["src/turns.ts"]
   src_voice["src/voice"]
   src_when_ts["src/when.ts"]
   src_writer_contract_ts["src/writer.contract.ts"]
@@ -125,6 +127,7 @@ flowchart LR
   src_app_ts --> src_phone
   src_app_ts --> src_phrases_ts
   src_app_ts --> src_trouble_ts
+  src_calendar_account_contract_ts --> src_messenger_ts
   src_calendar_contract_ts --> src_messenger_ts
   src_demo --> earshot
   src_demo --> src_instruction_ts
@@ -141,6 +144,7 @@ flowchart LR
   src_glasses --> src_when_ts
   src_google --> earshot
   src_google --> src_messenger_ts
+  src_google --> src_turns_ts
   src_inbox_ts --> earshot
   src_inbox_ts --> src_messenger_ts
   src_inbox_ts --> src_trouble_ts
@@ -165,7 +169,9 @@ flowchart LR
   src_telegram --> _mtcute
   src_telegram --> earshot
   src_telegram --> src_messenger_ts
+  src_telegram --> src_turns_ts
   src_trouble_ts --> src_messenger_ts
+  src_turns_ts --> earshot
   src_voice --> earshot
   src_voice --> src_instruction_ts
   src_voice --> src_messenger_ts

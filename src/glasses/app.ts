@@ -48,7 +48,6 @@ export interface GlassesParts {
   writer?: Writer
   calendar?: Calendar
   agenda?: Agenda
-  sampleMeetings?: boolean
   now?: () => number
 }
 
@@ -785,7 +784,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     const title = oneLine(cleanText(next.title))
     const running = next.start <= now()
     const time = whenWords(next.start, now()).replace(/^Today /, '')
-    if (parts.sampleMeetings) return `Sample: ${running ? 'now,' : time} ${title}`
+    if (parts.title) return `${parts.title}, ${running ? 'now' : `next ${time}`} ${title}`
     return running ? `Now: ${title}` : `Next: ${time} ${title}`
   }
 

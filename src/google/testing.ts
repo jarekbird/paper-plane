@@ -3,7 +3,9 @@ export interface GoogleSide {
   asked: { host: string; path: string; method: string; body: unknown; bearer: string | null }[]
   consent(link: string): string
   end(): void
+  forget(): void
   expire(): void
+  down(is: boolean): void
   put(event: Record<string, unknown>): void
   events(): Record<string, unknown>[]
   revoked: string[]
@@ -23,6 +25,7 @@ export function googleSide(): GoogleSide {
   let refresh: string | null = null
   let access = ''
   let events: Record<string, unknown>[] = []
+  let unreachable = false
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   const issue = () => (access = `access-${++serial}`)
@@ -47,6 +50,7 @@ export function googleSide(): GoogleSide {
       return json(200, { refresh, access: issue(), expires: 3600 })
     }
     if (url.host === 'relay.example' && url.pathname === '/google/refresh') {
+      if (unreachable) return json(502, {})
       if ((body as { refresh: string }).refresh !== refresh) return json(401, {})
       return json(200, { access: issue(), expires: 3600 })
     }
@@ -74,11 +78,10 @@ export function googleSide(): GoogleSide {
       const at = event[edge] as { dateTime?: string; date?: string }
       return Date.parse(at.dateTime ?? `${at.date}T00:00:00Z`)
     }
-    const listed = events
-      .filter(event => time(event, 'end') > from)
-      .sort((a, b) => time(a, 'start') - time(b, 'start'))
-      .slice(0, Number(url.searchParams.get('maxResults')))
-    return json(200, { items: listed })
+    const all = events.filter(event => time(event, 'end') > from).sort((a, b) => time(a, 'start') - time(b, 'start'))
+    const start = Number(url.searchParams.get('pageToken') ?? 0)
+    const end = start + Number(url.searchParams.get('maxResults'))
+    return json(200, { items: all.slice(start, end), ...(end < all.length ? { nextPageToken: String(end) } : {}) })
   }
 
   return {
@@ -93,6 +96,12 @@ export function googleSide(): GoogleSide {
     end: () => {
       refresh = null
       access = ''
+    },
+    forget: () => {
+      refresh = null
+    },
+    down: is => {
+      unreachable = is
     },
     expire: () => {
       access = ''
