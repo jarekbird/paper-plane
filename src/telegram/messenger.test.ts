@@ -281,6 +281,34 @@ describe('the Telegram adapter, when Telegram is in trouble', () => {
     expect(given?.aborted).toBe(true)
   })
 
+  it('A4: asks Telegram for no further page of chats once it has given up on the list', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeClient()
+      let release = () => {}
+      let pages = 0
+      const dialogs = fake.client.iterDialogs
+      fake.client.iterDialogs = async function* (params) {
+        pages++
+        await new Promise<void>(resolve => (release = resolve))
+        for await (const dialog of dialogs(params)) {
+          yield dialog
+          break
+        }
+        pages++
+        yield* dialogs(params)
+      }
+      const listing = failure(messengerOver(fake.client, fake.asking).chats())
+      await vi.advanceTimersByTimeAsync(ANSWER_MS)
+      expect(await listing).toEqual({ kind: 'unreachable' })
+      release()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(pages).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('A4: leaves no timer behind for a call that was answered', async () => {
     const fake = fakeClient()
     const before = fake.life.owned

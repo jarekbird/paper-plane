@@ -13,7 +13,7 @@ export interface ClientLike<Id> {
   saveDraft(chat: number, draft: { message: string }): Promise<void>
   forwardMessagesById(params: { toChatId: 'me'; fromChatId: number; messages: number[] }): Promise<unknown>
   sendReaction(params: { chatId: number; message: number; emoji: string }): Promise<unknown>
-  sponsoredMessages(chat: number): Promise<SponsoredLike[]>
+  sponsoredMessages(chat: number, signal: AbortSignal): Promise<SponsoredLike[]>
   viewSponsored(randomId: Uint8Array): Promise<unknown>
   onUpdate: {
     add(listener: (update: { name: string }) => void): void
@@ -89,9 +89,12 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
       client.onConnectionState.remove(linked)
     },
     chats: () =>
-      ask(async () => {
+      ask(async signal => {
         const chats: Chat[] = []
-        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) chats.push(toChat(dialog))
+        for await (const dialog of client.iterDialogs({ limit: DIALOGS, archived: 'exclude' })) {
+          signal.throwIfAborted()
+          chats.push(toChat(dialog))
+        }
         return chats
       }),
     history: async (chat, limit) => {
@@ -151,7 +154,7 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
       changed()
     },
     sponsored: async chat => {
-      const [first] = await ask(() => client.sponsoredMessages(Number(chat)))
+      const [first] = await ask(signal => client.sponsoredMessages(Number(chat), signal))
       if (!first) return null
       const id = sponsoredId(first)
       ads.set(id, first.randomId)
