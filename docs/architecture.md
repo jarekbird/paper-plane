@@ -57,7 +57,8 @@ Trouble is part of the interfaces, not of a screen: a call of `Messenger` fails 
 cannot be reached (the service gives up on a call after fifteen seconds, and asks nothing once the connection has
 been gone three) or asks the user to wait, and tells its listeners when Telegram is back. A message the user
 confirmed is one attempt, however often it is tried: `send` takes the attempt, and the service gives every try of
-it the same identity at Telegram, so a message whose answer was lost does not arrive twice. A sign-in that Telegram
+it the same identity at Telegram, so a message whose answer was lost does not arrive twice: a later try is
+answered with no message, which means sent, with nothing to take back. A sign-in that Telegram
 ended from another device is told by `Account.onEnded`, after the service forgot it. The words for both are in
 `src/trouble.ts` and `src/phone/signin.ts`; the sample account stages each (`src/demo`, A6).
 

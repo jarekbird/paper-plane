@@ -213,9 +213,17 @@ describe('a reply, when Telegram is in trouble', () => {
     await settle(5_000)
     expect(fake.lines()).toEqual(['To Anna', 'See you at noon', 'Not sent. Tap to try again'])
     await tap()
-    expect(fake.lines().at(-1)).toBe('Sent. Tap to undo')
+    expect(fake.overlay()).toBe('Sent')
+    await settle(5_000)
+    expect(fake.lines()).toEqual([
+      'Anna',
+      'You: See you at noon',
+      'I can do 12:30 at the usual place.',
+      'Nice. Are we still on for lunch first?',
+      'You: Running the demo at four.',
+      'Tap to reply',
+    ])
     expect(sent()).toEqual([['anna', 'See you at noon']])
-    expect((await messenger.history('anna', 10)).filter(message => message.text === 'See you at noon')).toHaveLength(1)
   })
 
   it('S5: a short answer arrives once too, when its answer was lost and the user picks it again', async () => {
@@ -227,7 +235,9 @@ describe('a reply, when Telegram is in trouble', () => {
     expect(fake.overlay()).toBe('Cannot reach Telegram')
     await settle(5_000)
     await tap()
-    await settle()
+    expect(fake.overlay()).toBe('Sent')
+    await settle(5_000)
+    expect(fake.lines().at(-1)).toBe('Tap to reply')
     expect(sent()).toHaveLength(1)
   })
 

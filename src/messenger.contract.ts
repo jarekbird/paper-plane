@@ -44,7 +44,7 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       const { messenger, chat } = await make()
       let told = 0
       const stop = messenger.onChange(() => told++)
-      const sent = await messenger.send(chat, 'Contract check')
+      const sent = (await messenger.send(chat, 'Contract check'))!
       expect(sent).toMatchObject({ chat, text: 'Contract check', mine: true })
       expect((await messenger.history(chat, 1))[0]).toMatchObject({ id: sent.id, text: 'Contract check' })
       expect(told).toBeGreaterThan(0)
@@ -62,7 +62,7 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
     it('takes back a message the user sent, for everyone, and tells listeners', async () => {
       const { messenger, chat } = await make()
       const before = (await messenger.history(chat, 1))[0]?.id
-      const sent = await messenger.send(chat, 'Sent by mistake')
+      const sent = (await messenger.send(chat, 'Sent by mistake'))!
       let told = 0
       const stop = messenger.onChange(() => told++)
       await messenger.unsend(sent)
@@ -174,15 +174,38 @@ export function messengerContract(name: string, make: () => Promise<ContractWorl
       stop()
     })
 
-    it('S5: delivers a message once when Telegram took it, its answer was lost, and the same attempt is made again', async () => {
+    it('S5: delivers a message once when Telegram took it and its answer was lost, however often the same attempt is made again', async () => {
       const { messenger, chat, loseAnswer } = await make()
       const attempt = {}
       await loseAnswer()
       await expect(messenger.send(chat, 'Only once', attempt)).rejects.toThrow()
-      const sent = await messenger.send(chat, 'Only once', attempt)
-      expect(sent).toMatchObject({ chat, text: 'Only once', mine: true })
-      const arrived = (await messenger.history(chat, 10)).filter(message => message.text === 'Only once')
-      expect(arrived.map(message => message.id)).toEqual([sent.id])
+      expect(await messenger.send(chat, 'Only once', attempt)).toBeNull()
+      expect(await messenger.send(chat, 'Only once', attempt)).toBeNull()
+      expect((await messenger.history(chat, 10)).filter(message => message.text === 'Only once')).toHaveLength(1)
+    })
+
+    it('S5: answers such a try with no message, so nothing else the user wrote can be taken back in its place', async () => {
+      const { messenger, chat, loseAnswer } = await make()
+      const attempt = {}
+      await loseAnswer()
+      await messenger.send(chat, 'Same words', attempt).catch(() => {})
+      const other = (await messenger.send(chat, 'Same words'))!
+      expect(await messenger.send(chat, 'Same words', attempt)).toBeNull()
+      const arrived = (await messenger.history(chat, 10)).filter(message => message.text === 'Same words')
+      expect(arrived).toHaveLength(2)
+      expect(arrived.at(-1)?.id).toBe(other.id)
+    })
+
+    it('tells listeners when a try finds its message already sent, so the chat shows it', async () => {
+      const { messenger, chat, loseAnswer } = await make()
+      const attempt = {}
+      await loseAnswer()
+      await messenger.send(chat, 'Look again', attempt).catch(() => {})
+      let told = 0
+      const stop = messenger.onChange(() => told++)
+      await messenger.send(chat, 'Look again', attempt)
+      expect(told).toBeGreaterThan(0)
+      stop()
     })
 
     it('sends the same words again when they are a new attempt', async () => {

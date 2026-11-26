@@ -14,7 +14,7 @@ const WAITS = ['FLOOD_WAIT_%d', 'SLOWMODE_WAIT_%d', 'FLOOD_PREMIUM_WAIT_%d'] as 
 
 export const ANSWER_MS = 15_000
 
-export type Within = <T>(work: (signal: AbortSignal) => Promise<T>) => Promise<T>
+export type Within = <T>(work: (signal: AbortSignal) => Promise<T>, caller?: AbortSignal) => Promise<T>
 
 export const sentBefore = (error: unknown): boolean => tl.RpcError.is(error, 'RANDOM_ID_DUPLICATE')
 
@@ -27,10 +27,13 @@ export function troubleOf(error: unknown): Trouble | null {
 }
 
 export function answerWithin(life: Lifetime, ms: number): Within {
-  return async work => {
+  return async (work, caller) => {
     const limit = new AbortController()
     let timer: Timer | undefined
-    const leave = life.own(() => limit.abort())
+    const stop = () => limit.abort()
+    const leave = life.own(stop)
+    const left = caller ? life.listen(caller, 'abort', stop) : undefined
+    if (caller?.aborted) stop()
     const late = new Promise<never>((_, reject) => {
       timer = life.timeout(() => {
         reject(new TroubleError({ kind: 'unreachable' }))
@@ -42,6 +45,7 @@ export function answerWithin(life: Lifetime, ms: number): Within {
     } finally {
       timer?.cancel()
       leave()
+      left?.()
     }
   }
 }

@@ -390,20 +390,31 @@ describe('the Telegram adapter, when Telegram is in trouble', () => {
     expect(new Set(given).size).toBe(3)
   })
 
-  it('S5: does not call a message sent when Telegram says it has it but it is not among the newest, and lets the next try go out afresh', async () => {
+  it('S5: does not read "already used" as sent on the first try of an attempt, when nothing of it can have been sent', async () => {
+    const fake = fakeClient()
+    fake.client.sendText = async () => {
+      throw refusal('RANDOM_ID_DUPLICATE')
+    }
+    expect(await failure(messengerOver(fake.client, fake.asking).send('42', 'First', {}))).toBeInstanceOf(tl.RpcError)
+  })
+
+  it('S5: keeps the identity of an attempt Telegram already has, so no later try can send it anew', async () => {
     const fake = fakeClient()
     const given: number[] = []
-    fake.client.sendText = async (_chat, _text, { randomId }) => {
-      given.push(randomId)
-      throw refusal('RANDOM_ID_DUPLICATE')
+    const sendText = fake.client.sendText
+    fake.client.sendText = async (chat, text, params) => {
+      given.push(params.randomId)
+      return sendText(chat, text, params)
     }
     const messenger = messengerOver(fake.client, fake.asking)
     const attempt = {}
-    await messenger.send('42', 'Lost', attempt).catch(() => {})
-    expect(await failure(messenger.send('42', 'Lost', attempt))).toBeInstanceOf(tl.RpcError)
-    await messenger.send('42', 'Lost', attempt).catch(() => {})
-    expect(given[1]).toBe(given[0])
-    expect(given[2]).not.toBe(given[0])
+    fake.loseAnswer()
+    await messenger.send('42', 'Kept', attempt).catch(() => {})
+    for (let more = 0; more < 40; more++) fake.add(fake.peers[0], fake.peers[0], `Newer ${more}`)
+    expect(await messenger.send('42', 'Kept', attempt)).toBeNull()
+    expect(await messenger.send('42', 'Kept', attempt)).toBeNull()
+    expect(new Set(given).size).toBe(1)
+    expect((await messenger.history('42', 100)).filter(message => message.text === 'Kept')).toHaveLength(1)
   })
 
   it('forgets the identity of an attempt once its message is sent', async () => {

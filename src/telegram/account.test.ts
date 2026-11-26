@@ -434,6 +434,31 @@ describe('the Telegram account', () => {
     }
   })
 
+  it('A4: stops asking for a code at the limit, and when the user leaves, so two requests for a code never overlap', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      const given: AbortSignal[] = []
+      made.first.sendCode = ({ abortSignal }) => {
+        given.push(abortSignal)
+        return new Promise(() => {})
+      }
+      void made.account.askCode(PHONE, live()).catch(() => {})
+      await vi.advanceTimersByTimeAsync(14_999)
+      expect(given[0].aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(given[0].aborted).toBe(true)
+      const left = new AbortController()
+      void made.account.askCode(PHONE, left.signal).catch(() => {})
+      await vi.advanceTimersByTimeAsync(0)
+      expect(given[1].aborted).toBe(false)
+      left.abort()
+      expect(given[1].aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('gives up restoring a sign-in when Telegram does not answer in fifteen seconds, and keeps the sign-in for the next try', async () => {
     vi.useFakeTimers()
     try {

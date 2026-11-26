@@ -28,7 +28,7 @@ export interface Sponsored {
 export interface Messenger {
   chats(): Promise<Chat[]>
   history(chat: string, limit: number): Promise<Message[]>
-  send(chat: string, text: string, attempt?: object): Promise<Message>
+  send(chat: string, text: string, attempt?: object): Promise<Message | null>
   read(chat: string): Promise<void>
   unsend(message: Message): Promise<void>
   keep(chat: string, text: string, signal: AbortSignal): Promise<boolean>

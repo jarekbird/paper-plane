@@ -216,7 +216,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         if (!screen) return
         state = 'sending'
         redraw()
-        let sent: Message
+        let sent: Message | null
         try {
           sent = await screen.guard(messenger.send(id, words, attempt))
         } catch (error) {
@@ -230,7 +230,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         state = 'sent'
         if (router.current === self) router.back()
         else redraw()
-        sentIn.get(id)?.(sent)
+        if (sent) sentIn.get(id)?.(sent)
+        else shell.notice(WORDS.sent)
       },
     })
     const keep = action({
@@ -575,7 +576,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         sending = true
         const attempt = attempts.get(text) ?? {}
         attempts.set(text, attempt)
-        let message: Message
+        let message: Message | null
         try {
           message = await screen.guard(messenger.send(id, text, attempt))
           attempts.delete(text)
@@ -586,7 +587,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         }
         sending = false
         if (router.current === answers) router.back()
-        sent(message)
+        if (message) sent(message)
+        else shell.notice(WORDS.sent)
       },
     })
 

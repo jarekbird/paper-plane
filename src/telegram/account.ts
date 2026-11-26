@@ -138,7 +138,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     askCode: async (phone, signal) => {
       let sent: { phoneCodeHash: string } | UserLike
       try {
-        sent = await life.guard(within(() => client.sendCode({ phone, abortSignal: signal })))
+        sent = await life.guard(within(abortSignal => client.sendCode({ phone, abortSignal }), signal))
       } catch (error) {
         throw problemOf(error)
       }

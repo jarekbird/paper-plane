@@ -75,7 +75,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
   const kept: Message[] = []
   const seenAds: string[] = []
   const drafts = new Map<string, string>()
-  const unanswered = new WeakMap<object, Message>()
+  const unanswered = new WeakSet<object>()
   let trouble: Trouble | null = null
   let losing = false
   const message = (chat: string, from: string, text: string, at: number): Message => ({
@@ -125,10 +125,9 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
     },
     send: async (id, text, attempt) => {
       reach()
-      const before = attempt && unanswered.get(attempt)
-      if (attempt && before) {
-        unanswered.delete(attempt)
-        return before
+      if (attempt && unanswered.has(attempt)) {
+        tell()
+        return null
       }
       const chat = find(id)
       const sent = message(id, 'You', text, now())
@@ -137,7 +136,7 @@ export function demoMessenger(now: () => number = Date.now): DemoMessenger {
       tell()
       if (!losing) return sent
       losing = false
-      if (attempt) unanswered.set(attempt, sent)
+      if (attempt) unanswered.add(attempt)
       throw new TroubleError({ kind: 'unreachable' })
     },
     read: async id => {

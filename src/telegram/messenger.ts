@@ -39,7 +39,6 @@ export interface Asking {
 }
 
 const DIALOGS = 100
-const RECENT = 30
 const CHANGES = new Set(['new_message', 'edit_message', 'delete_message', 'history_read'])
 export const GRACE_MS = 3_000
 
@@ -106,15 +105,13 @@ export function messengerOver<Id>(client: ClientLike<Id>, { within, session, now
       const kept = attempt ? tried.get(attempt) : undefined
       const randomId = kept ?? client.randomId()
       if (attempt) tried.set(attempt, randomId)
-      let sent: MessageLike | undefined
+      let sent: MessageLike
       try {
         sent = await ask(abortSignal => client.sendText(Number(chat), text, { abortSignal, randomId }))
       } catch (error) {
         if (kept === undefined || !sentBefore(error)) throw error
-        const recent = await ask(() => client.getHistory(Number(chat), { limit: RECENT }))
-        sent = recent.find(message => message.isOutgoing && message.text === text)
-        if (attempt) tried.delete(attempt)
-        if (!sent) throw error
+        changed()
+        return null
       }
       if (attempt) tried.delete(attempt)
       changed()
