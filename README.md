@@ -4,8 +4,8 @@ Telegram on [Even Realities G2](https://www.evenrealities.com) glasses: the chat
 voice. Hold the touchpad, say the reply, read it back on the glasses, tap to send.
 
 Built for the **Heads Up** hackathon (Even Realities × TVM Ventures × Daos Hub), 23–29 November 2026.
-Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (Google Calendar, and OpenRouter to turn what
-you say into a message), in one flow.
+Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (OpenRouter, to turn what you say into an
+action or a message; Google Calendar is being built), in one flow.
 
 ## What it does
 
@@ -39,9 +39,12 @@ sends it. And no model ever reads your chats: AI works on what you say, never on
 This is a build in progress, during the hackathon week.
 
 - **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
-  Sign-in to your own account, the voice relay and the writer behind "tell her yes and ask where" are built; the
-  relay is deployed and both models were tried live (below).
-- **Not proven yet:** a run on real Telegram and on real glasses.
+  The voice relay is deployed, and both models were tried live (above).
+- **Tried on real Telegram, once (26 November):** signing in with number and code from the app in the simulator,
+  the list of chats (61 came back), and signing out. Sending, folders, mentions and channels have not been tried
+  there yet.
+- **Not built yet:** Google Calendar. Until it is, the second track rests on the voice and writing models.
+- **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
 ## Run it

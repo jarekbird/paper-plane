@@ -19,14 +19,14 @@ bot or a server the user hosts. Paper Plane stands out by:
 
 | #   | Feature                                                                                                    | State                    |
 | --- | ---------------------------------------------------------------------------------------------------------- | ------------------------ |
-| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; never run on Telegram |
+| 1   | Sign in on the phone: number, code, two-step password; stays signed in; sign out                           | built; signed in on Telegram once |
 | 2   | Pick what reaches the glasses: single chats, or a whole Telegram folder                                    | built, on samples        |
 | 3   | Home: picked chats, unread first, mentions marked, live as messages arrive                                 | built, on samples        |
 | 4   | Read: newest message first, names in groups, attachments named, marked read when shown                     | built, on samples        |
 | 5   | Reply by voice: hold, speak, see it, tap sends; say it again to replace; double tap drops                  | built, on samples        |
 | 6   | Say it short: "tell her yes and ask where" becomes a full message to check and send                        | built; 93 of 102 on the real model |
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
-| 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built but mute; 48 of 50 |
+| 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built; 48 of 50; no mute |
 | 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built, on samples        |
 | 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         |                          |
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built, on samples        |
@@ -35,18 +35,22 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
 | 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              | built, on samples; never run on Telegram |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
-| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.1.0: samples, voice |
+| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.2.0: Telegram, voice |
 
 Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 
-## Before the Telegram build can ship
+## The Telegram build
 
-- An app id (my.telegram.org). Without one the build has no Telegram and shows only the sample account.
-- `VITE_RELAY` in the build (the Worker `paper-plane-relay` is deployed and holds its key): without it a hold on
+- It has an app id (my.telegram.org) since 26 November, kept only where the build is packed. A build without one
+  has no Telegram and shows only the sample account.
+- `VITE_RELAY` is in the build (the Worker `paper-plane-relay` is deployed and holds its key): without it a hold on
   real glasses hears nothing.
-- A run on real Telegram: sign-in, chats, sending, on Jarek's own account, writing only to Saved Messages.
+- A run on real Telegram, on Jarek's own account: signing in, the list of chats and signing out are done, once.
+  Sending is still to do, writing only to Saved Messages.
 
 ## Not now
+
+- Mute ("mute this for an hour"): left out (Jarek, 2026-11-26).
 
 - Voice messages (send from the glasses, read incoming ones as text).
 - Gmail.

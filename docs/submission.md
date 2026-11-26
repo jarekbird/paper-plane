@@ -56,10 +56,10 @@ action, and writing a message out). Also entered for the Best Telegram integrati
 **Built on.** Earshot, the author's open-source voice-first framework for G2 apps; mtcute for Telegram's protocol;
 one small Cloudflare Worker that holds the OpenRouter key and stores nothing.
 
-**To be honest about.** Say in the description what was run where, as the README does. As of this draft: every
-screen and the voice flow run on a built-in sample account; the voice relay and both models were tried live;
-sign-in to a real Telegram account and a run on real glasses are not proven yet. Update this paragraph, and the
-README's "State", on the day of filing.
+**To be honest about.** Say in the description what was run where, as the README does. As of 26 November: every
+screen and the voice flow run on a built-in sample account; the voice relay and both models were tried live; on
+real Telegram the app signed in, listed the chats and signed out, once; sending there, Google Calendar and a run on
+real glasses are not proven yet. Update this paragraph, and the README's "State", on the day of filing.
 
 ## Video: up to 3 minutes
 
