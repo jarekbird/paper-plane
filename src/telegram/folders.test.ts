@@ -4,8 +4,16 @@ import { foldersOf } from './folders.ts'
 
 const user = (userId: number): tl.TypeInputPeer => ({ _: 'inputPeerUser', userId, accessHash: Long.ZERO })
 const title = (text: string): tl.TypeTextWithEntities => ({ _: 'textWithEntities', text, entities: [] })
-const dialog = (id: number, more: object = {}) =>
-  ({ peer: { id, type: 'user', isContact: false, isBot: false, ...more } }) as unknown as Dialog
+const dialog = (id: number, more: object = {}, counts: object = {}) =>
+  ({
+    peer: { id, type: 'user', isContact: false, isBot: false, ...more },
+    unreadCount: 0,
+    unreadMentionsCount: 0,
+    isManuallyUnread: false,
+    isMuted: false,
+    isArchived: false,
+    ...counts,
+  }) as unknown as Dialog
 const folder = (more: Partial<tl.RawDialogFilter>): tl.RawDialogFilter => ({
   _: 'dialogFilter',
   id: 2,
@@ -44,5 +52,19 @@ describe('which chats a Telegram folder holds, by the library’s own rule', () 
   it('leaves out "All chats", which is no folder to pick, and keeps each folder’s id and name', () => {
     const folders = foldersOf([{ _: 'dialogFilterDefault' }, folder({ id: 7, title: title('Family') })])
     expect(folders.map(one => [one.id, one.title])).toEqual([[7, 'Family']])
+  })
+
+  it('counts a chat with one unread message as unread in a folder of unread chats, where the library counts from two', () => {
+    const [unread] = foldersOf([folder({ nonContacts: true, excludeRead: true })])
+    expect([0, 1, 2].map(unreadCount => unread.has(dialog(42, {}, { unreadCount })))).toEqual([false, true, true])
+    expect(unread.has(dialog(42, {}, { isManuallyUnread: true }))).toBe(true)
+    expect(unread.has(dialog(42, {}, { unreadMentionsCount: 1 }))).toBe(true)
+  })
+
+  it('leaves muted and archived chats out of a folder that excludes them', () => {
+    const [quiet] = foldersOf([folder({ nonContacts: true, excludeMuted: true, excludeArchived: true })])
+    expect(quiet.has(dialog(42))).toBe(true)
+    expect(quiet.has(dialog(42, {}, { isMuted: true }))).toBe(false)
+    expect(quiet.has(dialog(42, {}, { isArchived: true }))).toBe(false)
   })
 })

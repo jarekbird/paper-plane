@@ -69,7 +69,14 @@ export function toMessage(message: MessageLike): Message {
   }
 }
 
-const FOLDER_CHANGES = new Set(['updateDialogFilter', 'updateDialogFilterOrder', 'updateDialogFilters'])
+const FOLDER_CHANGES = new Set([
+  'updateDialogFilter',
+  'updateDialogFilterOrder',
+  'updateDialogFilters',
+  'updateFolderPeers',
+  'updateNotifySettings',
+  'updateDialogUnreadMark',
+])
 
 export const foldersChanged = (told: { update: { _: string } }): boolean => FOLDER_CHANGES.has(told.update._)
 

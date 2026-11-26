@@ -223,13 +223,30 @@ describe('the Telegram adapter', () => {
     expect(told).toBe(4)
   })
 
-  it('tells listeners when the user changes a folder in Telegram, adds one, removes one or reorders them, and for no other raw update', () => {
+  it.each([
+    'updateDialogFilter',
+    'updateDialogFilterOrder',
+    'updateDialogFilters',
+    'updateFolderPeers',
+    'updateNotifySettings',
+    'updateDialogUnreadMark',
+  ])(
+    'tells listeners on %s: a folder was changed, or a chat was archived, muted or marked unread, which can move it in or out of a folder',
+    name => {
+      const fake = fakeClient()
+      let told = 0
+      messengerOver(fake.client, fake.asking).onChange(() => told++)
+      fake.raw(name)
+      expect(told).toBe(1)
+    },
+  )
+
+  it('tells listeners nothing for a raw update that changes no folder', () => {
     const fake = fakeClient()
     let told = 0
     messengerOver(fake.client, fake.asking).onChange(() => told++)
-    for (const name of ['updateDialogFilter', 'updateDialogFilterOrder', 'updateDialogFilters', 'updateUserTyping', 'updateConfig'])
-      fake.raw(name)
-    expect(told).toBe(3)
+    for (const name of ['updateUserTyping', 'updateConfig', 'updateUserStatus']) fake.raw(name)
+    expect(told).toBe(0)
   })
 
   it('lists an archived chat only when it is in one of the user’s folders, so a picked folder is whole', async () => {
