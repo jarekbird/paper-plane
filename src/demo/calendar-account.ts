@@ -19,6 +19,8 @@ export function demoCalendarAccount(session: { connected: boolean }): CalendarAc
       if (!begun) return false
       begun = false
       if (code.replace(/\D/g, '') !== DEMO_PAIR_CODE) return false
+      await Promise.resolve()
+      signal.throwIfAborted()
       session.connected = true
       tell()
       return true

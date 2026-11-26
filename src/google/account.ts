@@ -1,4 +1,4 @@
-import type { Lifetime } from 'earshot'
+import { LifetimeEnded, type Lifetime } from 'earshot'
 import type { CalendarAccount } from '../messenger.ts'
 import { turns } from '../turns.ts'
 
@@ -76,14 +76,17 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       inTurn(async () => {
         if (of !== signIn) return null
         const have = parsed(await life.guard(place.load()))
-        signIn++
         await life.guard(place.save(null))
+        signIn++
         return have
       }),
     )
     if (had) tell()
     return had
   }
+
+  const revoke = (refresh: string) =>
+    ask(REVOKE, { method: 'POST', body: new URLSearchParams({ token: refresh }), signal: life.signal }).catch(() => null)
 
   const renew = async (have: Kept, of: number, signal: AbortSignal): Promise<string> => {
     const response = await life.guard(post('/google/refresh', { refresh: have.refresh }, signal))
@@ -141,14 +144,26 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       const { refresh, access } = given
       if (typeof refresh !== 'string' || typeof access !== 'string') throw new Error('The sign-in could not be picked up')
       if (verifier === secret) verifier = null
-      await life.guard(
+      const kept = await life.guard(
         inTurn(async () => {
+          if (signal.aborted) return 'left'
+          try {
+            await life.guard(place.save(JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })))
+          } catch (error) {
+            if (error instanceof LifetimeEnded) throw error
+            return 'unkept'
+          }
           signIn++
-          await life.guard(place.save(JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })))
+          return 'kept'
         }),
       )
-      tell()
-      return true
+      if (kept === 'kept') {
+        tell()
+        return true
+      }
+      await life.guard(revoke(refresh))
+      if (kept === 'left') return signal.throwIfAborted() as never
+      throw new Error('The sign-in could not be kept on this phone')
     },
     signIn: () => signIn,
     token: async (asked, signal) => {
@@ -168,9 +183,7 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
     },
     signOut: async () => {
       const had = await life.guard(forget(signIn))
-      if (had === null) return
-      const form = new URLSearchParams({ token: had.refresh })
-      await life.guard(ask(REVOKE, { method: 'POST', body: form, signal: life.signal }).catch(() => null))
+      if (had !== null) await life.guard(revoke(had.refresh))
     },
     onChange: told => {
       listeners.add(told)

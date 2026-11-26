@@ -82,6 +82,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     scope = 'connecting'
     inbox = null
     shown = null
+    diary = null
     startWaiting(session, display, NOTES.connecting)
     phone?.(session, { inbox: null, phrases, signIn, connect, note: NOTES.connecting, build })
   }
@@ -146,6 +147,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     scope = 'offline'
     inbox = null
     shown = null
+    diary = null
     startWaiting(session, display, NOTES.offline, () => void retry(model))
     phone?.(session, { inbox: null, phrases, signIn, connect, note: NOTES.offline, build })
   }

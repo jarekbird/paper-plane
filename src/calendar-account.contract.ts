@@ -56,6 +56,20 @@ export function calendarAccountContract(name: string, make: () => Promise<Calend
       expect(await world.account.known()).toBe(false)
     })
 
+    it('A5: connects nothing for a user who leaves the step while the code is being taken', async () => {
+      const world = await make()
+      const code = await world.signInAt(await world.account.begin())
+      let told = 0
+      const stop = world.account.onChange(() => told++)
+      const leaving = new AbortController()
+      const finishing = world.account.finish(code, leaving.signal)
+      leaving.abort()
+      await expect(finishing).rejects.toThrow()
+      expect(await world.account.known()).toBe(false)
+      expect(told).toBe(0)
+      stop()
+    })
+
     it('disconnects, tells its listeners, and can be connected again', async () => {
       const world = await make()
       await connect(world)

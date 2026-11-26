@@ -65,6 +65,7 @@ const HISTORY = 6
 const DIM = 2
 const ROWS = Math.floor(SCREEN_HEIGHT / LINE_HEIGHT) - 2
 const UNDO_MS = 5_000
+const MINUTE_MS = 60_000
 // Where a reply can be meant: on typesafe/jev-1.14 on 2026-11-25 every command tried scored 0.68 or more ("go home" the lowest) and no dictated reply reached 0.6 for a command but one harmless scroll (docs/proof/voice/live.md).
 const SURE = 0.6
 const REPLY = 'Reply'
@@ -352,7 +353,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         redraw()
       },
     })
-    const offering = () => event !== null && book !== null && diary()?.calendar === book.calendar
+    const eventNow = (): string | null => {
+      if (!event || !book || diary()?.calendar !== book.calendar || event.start <= now()) return null
+      const line = `Calendar: ${spanWords(event.start, event.end, now())}, ${event.title}`
+      return fitText(line, SCREEN_WIDTH) === line ? line : null
+    }
+    const offering = () => eventNow() !== null
     const foot = () => busy() ?? (state === 'failed' ? WORDS.notSent : offering() ? WORDS.tapOrAdd : WORDS.tapToSend)
 
     const self: Screen = {
@@ -368,12 +374,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       context: () => 'A reply, not sent yet',
       enter: entered => {
         screen = entered
+        if (event) entered.interval(redraw, MINUTE_MS)
         if (!unwritten) return
         unwritten = false
         void writeOut()
       },
       view: () =>
-        boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot(), offering() ? eventLine : undefined), {
+        boxes(page(`To ${titleOf(id)}`, scroll.shown(), foot(), eventNow() ?? undefined), {
           on: { tap: send, down: scroll.down, up: scroll.up },
         }),
     }

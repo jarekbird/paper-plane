@@ -284,4 +284,67 @@ describe('the Google sign-in on the phone', () => {
     await expect(account.token(first, live())).rejects.toBeInstanceOf(GoogleEnded)
     expect((await account.token(account.signIn(), live())).value).toMatch(/^access-/)
   })
+
+  it('A5: keeps nothing, and has Google end the sign-in it picked up, when the user left while it was waiting to be written', async () => {
+    const made = world()
+    const load = made.place.load
+    let release: (() => void) | null = null
+    let holdNext = false
+    made.place.load = async () => {
+      if (holdNext) {
+        holdNext = false
+        await new Promise<void>(resolve => (release = resolve))
+      }
+      return load()
+    }
+    const code = made.side.consent(await made.account.begin())
+    holdNext = true
+    const asking = made.account.known()
+    await until(() => release !== null)
+    let told = 0
+    made.account.onChange(() => told++)
+    const leaving = new AbortController()
+    const finishing = made.account.finish(code, leaving.signal).catch(() => 'left')
+    await until(() => made.side.asked.some(call => call.path === '/google/pickup'))
+    await tick()
+    leaving.abort()
+    release!()
+    expect(await finishing).toBe('left')
+    expect(await asking).toBe(false)
+    expect(made.kept()).toBeNull()
+    expect(told).toBe(0)
+    expect(made.side.revoked).toHaveLength(1)
+  })
+
+  it('S3: is not connected when the phone could not keep the sign-in, and has Google end the one it picked up', async () => {
+    const made = world()
+    const code = made.side.consent(await made.account.begin())
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    let told = 0
+    made.account.onChange(() => told++)
+    await expect(made.account.finish(code, live())).rejects.toThrow()
+    made.place.save = save
+    expect(await made.account.known()).toBe(false)
+    expect(told).toBe(0)
+    expect(made.side.revoked).toHaveLength(1)
+  })
+
+  it('stays connected, with a calendar that still works, when the phone could not forget the sign-in on disconnect', async () => {
+    const made = world()
+    await made.connect()
+    const before = made.account.signIn()
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    await expect(made.account.signOut()).rejects.toThrow()
+    made.place.save = save
+    expect(await made.account.known()).toBe(true)
+    expect(made.account.signIn()).toBe(before)
+    expect((await made.account.token(before, live())).value).toMatch(/^access-/)
+    expect(made.side.revoked).toEqual([])
+  })
 })
