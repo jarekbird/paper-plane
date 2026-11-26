@@ -38,6 +38,7 @@ focused run in a part you touched.
 - `node scripts/architecture.mjs` (G3 and the module map in `docs/architecture.md`), tested by
   `scripts/architecture.test.mjs`. `npm run architecture` regenerates the map.
 - `scripts/ci.test.mjs`: the shape of CI. Run it with any change to `.github/workflows/` or the `check` script.
+- `scripts/icon.test.mjs`: `assets/icon.png` is the picture `scripts/icon.mjs` draws, in the size Even Hub takes.
 - `node scripts/store-check.mjs <folder>`, after a build into that folder: Even Hub's store rules for `app.json`, and
   every URL in the built files against the whitelist (Earshot's check). It reads scripts as JavaScript, so a URL
   joined from parts is found, and one whose host is only known at run time fails. `npm run build:telegram` builds
