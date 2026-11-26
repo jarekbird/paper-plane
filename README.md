@@ -42,9 +42,11 @@ This is a build in progress, during the hackathon week.
 
 - **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
   The voice relay is deployed, and both models were tried live (above).
-- **Tried on real Telegram (26 November):** signing in with number and code from the app in the simulator, the
-  list of chats (61 came back), staying signed in over a restart, and signing out. Sending, folders, mentions and
-  channels have not been tried there yet.
+- **Tried on real Telegram (26 November), from the app in the simulator, writing only to Saved Messages:** signing
+  in with number and code, the list of chats (61 came back), staying signed in over a restart, signing out; a
+  reply sent, there within half a second of the tap, and undone; "Keep for later", which showed as the chat's
+  draft in Telegram Web. The words of each hold were scripted. Folders, mentions, channels, reactions and the
+  trouble paths have not been tried there yet.
 - **Google Calendar:** built and tried on the sample calendar. Never run against Google yet, and not in the beta:
   a build offers it only when it is packed with `VITE_GOOGLE_CALENDAR=on`.
 - **Not proven yet:** a run on real glasses.
