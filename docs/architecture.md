@@ -59,7 +59,10 @@ been gone three) or asks the user to wait, and tells its listeners when Telegram
 confirmed is one attempt, however often it is tried: `send` takes the attempt, and the service gives every try of
 it the same identity at Telegram, so a message whose answer was lost does not arrive twice: a later try is
 answered with no message, which means sent, with nothing to take back. A sign-in that Telegram
-ended from another device is told by `Account.onEnded`, after the service forgot it. The words for both are in
+ended from another device is told by `Account.onEnded` in the same step in which the service learns of it and
+replaces its connection. Everything the account writes to the phone's store of the sign-in then runs in one line,
+one write after the other, and a removal is done only when every copy has answered, so an old removal can never
+land on a newer sign-in. The words for both are in
 `src/trouble.ts` and `src/phone/signin.ts`; the sample account stages each (`src/demo`, A6).
 
 Every screen is an Earshot screen: a view and a list of actions. Earshot's `Router` holds the stack of screens, its

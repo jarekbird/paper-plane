@@ -1,8 +1,9 @@
-import { Lifetime } from 'earshot'
+import { Lifetime, memoryPlace } from 'earshot'
 import { tl } from '@mtcute/core'
 import { describe, expect, it, vi } from 'vitest'
 import { accountContract } from '../account.contract.ts'
 import { SignInError, TroubleError } from '../messenger.ts'
+import { storeOver } from '../store.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 
 const PHONE = '+15550100199'
@@ -568,7 +569,6 @@ describe('the Telegram account', () => {
       await turn()
       expect(made.first.drops).toBe(1)
       made.place.save = save
-      await made.account.signOut()
       await made.account.askCode(PHONE, live())
       const entering = made.account.giveCode(CODE, live())
       await turn()
@@ -605,5 +605,90 @@ describe('the Telegram account', () => {
       process.off('unhandledRejection', hear)
     }
     expect(unheard).toEqual([])
+  })
+
+  it('tells listeners at once that the sign-in ended, also when a sign-out the user starts next fails on every side', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    let fail = () => {}
+    made.place.save = session =>
+      session === null ? new Promise<void>((_, reject) => (fail = () => reject(new Error('full')))) : save(session)
+    made.first.logOut = async () => refuse('AUTH_KEY_UNREGISTERED')
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(made.account.era())
+    expect(told).toBe(1)
+    const leaving = made.account.signOut().catch((error: unknown) => error)
+    await turn()
+    fail()
+    await turn()
+    fail()
+    expect(await leaving).toBeInstanceOf(SignInError)
+    expect(told).toBe(1)
+    expect(await Promise.race([made.account.known(), turn().then(() => 'waiting')])).toBe('waiting')
+    made.place.save = save
+    fail()
+    expect(await made.account.known()).toBe(false)
+  })
+
+  it('S3: keeps a new sign-in when one copy of the ended one could not be removed and the other is removed late', async () => {
+    const side = telegramSide(false)
+    const even = memoryPlace()
+    const web = memoryPlace()
+    const held: (() => void)[] = []
+    let holding = false
+    let webWrites = true
+    const { sessions } = storeOver([
+      {
+        read: key => even.read(key),
+        write: async (key, text) => {
+          if (holding) await new Promise<void>(resolve => held.push(resolve))
+          return even.write(key, text)
+        },
+      },
+      { read: key => web.read(key), write: (key, text) => (webWrites ? web.write(key, text) : Promise.reject(new Error('unwritable'))) },
+    ])
+    const account = accountOver(new Lifetime(), side.client(), sessions)
+    await account.askCode(PHONE, live())
+    await account.giveCode(CODE, live())
+    webWrites = false
+    holding = true
+    account.ended(account.era())
+    await turn()
+    holding = false
+    await account.askCode(PHONE, live())
+    const entering = account.giveCode(CODE, live())
+    await turn()
+    for (const release of held) release()
+    expect(await entering).toEqual({ id: '4242', name: NAME })
+    await turn()
+    expect(await account.known()).toBe(true)
+    expect(await sessions.load()).toMatch(/^session-/)
+  })
+
+  it('A4: writes nothing more to the phone once the app has ended, also what was waiting its turn', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    const save = made.place.save
+    const written: (string | null)[] = []
+    let first = () => {}
+    made.place.save = async session => {
+      written.push(session)
+      if (written.length === 1) await new Promise<void>(resolve => (first = resolve))
+      return save(session)
+    }
+    const life = new Lifetime()
+    const account = accountOver(life, made.first, made.place)
+    await account.askCode(PHONE, live())
+    void account.giveCode(CODE, live()).catch(() => {})
+    await turn()
+    void account.signOut().catch(() => {})
+    await turn()
+    life.end()
+    first()
+    await turn()
+    expect(written).toHaveLength(1)
   })
 })

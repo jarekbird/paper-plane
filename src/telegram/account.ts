@@ -50,20 +50,32 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   let era = 0
   let inside = false
   let stale = false
-  let forgetting: Promise<boolean> | null = null
+  let turn: Promise<void> = Promise.resolve()
 
-  const remove = async (): Promise<boolean> => {
-    const removed = await life.guard(done(() => place.save(null)))
-    forgetting = null
-    stale = !removed
-    return removed
+  const inTurn = async <T>(work: () => Promise<T>): Promise<T> => {
+    const before = turn
+    let free = () => {}
+    turn = new Promise<void>(resolve => (free = resolve))
+    try {
+      await life.guard(before)
+      return await life.guard(work())
+    } finally {
+      free()
+    }
   }
 
-  const forgotten = (): Promise<boolean> => {
-    if (!stale) return Promise.resolve(true)
-    forgetting ??= remove()
-    return forgetting
-  }
+  const write = (session: string | null): Promise<void> =>
+    inTurn(async () => {
+      await life.guard(place.save(session))
+      stale = false
+    })
+
+  const forgotten = (): Promise<boolean> =>
+    inTurn(async () => {
+      if (!stale) return true
+      stale = !(await life.guard(done(() => place.save(null))))
+      return !stale
+    })
 
   const enter = (user: UserLike): Who => {
     era++
@@ -71,17 +83,15 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     return { id: String(user.id), name: user.displayName }
   }
 
-  const end = async (at: number) => {
+  const end = (at: number) => {
     if (!inside || at !== era) return
-    const mine = ++era
+    era++
     inside = false
     pending = null
     stale = true
-    const dropped = done(() => client.drop())
-    dropped.catch(() => {})
-    await life.guard(forgotten())
-    await life.guard(dropped)
-    if (era === mine) for (const told of [...listeners]) told()
+    void forgotten().catch(() => {})
+    void done(() => client.drop()).catch(() => {})
+    for (const told of [...listeners]) told()
   }
 
   const done = async (work: () => Promise<unknown>): Promise<boolean> => {
@@ -95,7 +105,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   }
 
   const forget = async (): Promise<boolean> => {
-    const removed = await life.guard(done(() => place.save(null)))
+    const removed = await life.guard(done(() => write(null)))
     const ended = await life.guard(done(async () => client.logOut()))
     if (removed && !ended) await life.guard(done(() => client.drop()))
     return removed || ended
@@ -109,9 +119,8 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
         const session = await life.guard(client.exportSession())
         if (!signal.aborted) {
           await life.guard(forgotten())
-          await life.guard(place.save(session))
+          await life.guard(write(session))
           stored = true
-          stale = false
         }
         if (!signal.aborted) await life.guard(client.startUpdatesLoop())
       }
@@ -142,7 +151,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
         await life.guard(within(() => client.startUpdatesLoop()))
       } catch (error) {
         if (!signedOut(error)) throw error
-        await life.guard(place.save(null))
+        await life.guard(write(null))
         return null
       }
       return enter(me)
@@ -184,7 +193,7 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
       const was = inside
       era++
       inside = false
-      const removed = await life.guard(done(() => place.save(null)))
+      const removed = await life.guard(done(() => write(null)))
       const ended = await life.guard(done(async () => client.logOut()))
       if (ended) return 'told'
       if (!removed) {
@@ -199,6 +208,6 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
       return () => void listeners.delete(told)
     },
     era: () => era,
-    ended: at => void end(at).catch(() => {}),
+    ended: end,
   }
 }

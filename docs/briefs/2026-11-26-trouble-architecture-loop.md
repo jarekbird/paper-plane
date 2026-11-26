@@ -35,3 +35,16 @@ listeners.
 
 One more round for Architecture on this commit, and the same for the other two focuses, since a commit was added
 after they approved.
+
+## After round 6
+
+Jarek allowed up to five more rounds. Round 6 found the same kind twice more: Security, that the removal counted as
+done when one copy failed while the other was still on its way; Architecture, that a sign-out failing during the
+cleanup swallowed the notice. So the cleanup no longer has waits at all:
+
+- `end()` decides, replaces the connection and tells listeners in one synchronous step. Nothing can come between.
+- Every write of the sign-in to the phone (`write`, `forgotten` in `src/telegram/account.ts`) takes its turn in one
+  line (`inTurn`), and each changes `stale` inside its turn, before the next starts.
+- `src/store.ts` reports a removal only when every copy has answered.
+
+`forgetting`, named above, is gone with this.
