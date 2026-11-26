@@ -36,6 +36,10 @@ own. `evenhub` is signed in on Tower only.
    `npx evenhub promote <version> --to beta`.
 5. Tag `v<version>` on the commit and push the tag.
 
+The app's icon is `assets/icon.png`, drawn by `node scripts/icon.mjs` from the grid in that file (Even Hub takes
+24×24 and reads it two pixels by two). `npx evenhub update --icon assets/icon.png` sets it on the Even Hub; like an
+upload, only on Jarek's word.
+
 ## The Worker
 
 `worker/` is Earshot's relay as the Cloudflare Worker `paper-plane-relay`. CI never deploys it and never reaches

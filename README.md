@@ -4,8 +4,8 @@ Telegram on [Even Realities G2](https://www.evenrealities.com) glasses: the chat
 voice. Hold the touchpad, say the reply, read it back on the glasses, tap to send.
 
 Built for the **Heads Up** hackathon (Even Realities × TVM Ventures × Daos Hub), 23–29 November 2026.
-Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (Google Calendar, and OpenRouter to turn what
-you say into a message), in one flow.
+Tracks: **Messaging & News** (Telegram) and **AI Assistants & Work** (OpenRouter, to turn what you say into an
+action or a message; Google Calendar is being built), in one flow.
 
 ## What it does
 
@@ -39,9 +39,12 @@ sends it. And no model ever reads your chats: AI works on what you say, never on
 This is a build in progress, during the hackathon week.
 
 - **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
-  Sign-in to your own account, the voice relay and the writer behind "tell her yes and ask where" are built; the
-  relay is deployed and both models were tried live (below).
-- **Not proven yet:** a run on real Telegram and on real glasses.
+  The voice relay is deployed, and both models were tried live (above).
+- **Tried on real Telegram, once (26 November):** signing in with number and code from the app in the simulator,
+  the list of chats (61 came back), and signing out. Sending, folders, mentions and channels have not been tried
+  there yet.
+- **Not built yet:** Google Calendar. Until it is, the second track rests on the voice and writing models.
+- **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
 ## Run it
@@ -57,8 +60,9 @@ npx evenhub-simulator http://127.0.0.1:5183           # Even's simulator, in a s
 In the simulator: swipe to move, tap to open a chat, double tap to go back. To try a spoken reply without a microphone
 or any service, open `http://127.0.0.1:5183/#say=See you at noon` instead: each hold then "hears" that sentence.
 To see what the glasses say when Telegram is in trouble, add `#trouble=unreachable` or `#trouble=wait`: the sample
-chats lose Telegram eight seconds after launch and have it back at thirty. `#account=sample&trouble=ended` starts
-signed in to the sample sign-in and ends it from "another device".
+chats lose Telegram eight seconds after launch and have it back at thirty. In a build with Telegram in it, add
+`account=sample` too: trouble is never staged on your own chats. `#account=sample&trouble=ended` starts signed in
+to the sample sign-in and ends it from "another device".
 
 ```sh
 npm run check   # format, lint, architecture rules, types, tests, build and Even Hub's store rules
