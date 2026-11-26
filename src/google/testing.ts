@@ -58,9 +58,12 @@ export function googleSide(): GoogleSide {
     }
     if (url.host === 'oauth2.googleapis.com' && url.pathname === '/revoke') {
       if (unheard) throw new Error('offline')
-      revoked.push(new URLSearchParams(text).get('token') ?? '')
-      refresh = null
-      access = ''
+      const ended = new URLSearchParams(text).get('token') ?? ''
+      revoked.push(ended)
+      if (ended === refresh) {
+        refresh = null
+        access = ''
+      }
       return json(200, {})
     }
     if (url.host !== 'www.googleapis.com' || !url.pathname.startsWith('/calendar/v3/calendars/primary/events')) return json(404, {})

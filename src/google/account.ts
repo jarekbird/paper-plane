@@ -69,11 +69,11 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
   }
   const post = (path: string, body: unknown, signal: AbortSignal) =>
     ask(`${relay}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal })
-  let orphaned = false
+  let orphan: string | null = null
   const current = () =>
     inTurn(async () => {
-      if (orphaned) orphaned = !(await life.guard(stored(null)))
-      return { have: orphaned ? null : parsed(await life.guard(place.load())), of: signIn }
+      if (orphan !== null && (await life.guard(stored(null)))) orphan = null
+      return { have: orphan === null ? parsed(await life.guard(place.load())) : null, of: signIn }
     })
 
   const holds = async (wanted: string | null): Promise<boolean> => {
@@ -176,16 +176,16 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
       const { refresh, access } = given
       if (typeof refresh !== 'string' || typeof access !== 'string') throw new Error('The sign-in could not be picked up')
       if (verifier === secret) verifier = null
+      const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
       const write = async (): Promise<'kept' | 'left' | 'unkept' | 'stuck'> => {
         try {
           return await life.guard(
             inTurn(async (): Promise<'kept' | 'left' | 'unkept' | 'stuck'> => {
               if (signal.aborted) return 'left'
               const before = await life.guard(place.load())
-              const next = JSON.stringify({ refresh, access, until: now() + (Number(given.expires) || 0) * 1000 })
               if (!(await life.guard(stored(next)))) return 'unkept'
               if (!signal.aborted) {
-                orphaned = false
+                orphan = null
                 signIn++
                 return 'kept'
               }
@@ -203,16 +203,20 @@ export function googleAccount(life: Lifetime, { relay, place, ask = fetch, now =
         return true
       }
       const ended = await life.guard(revoke(refresh))
-      if (kept === 'stuck' && !ended) {
-        await life.guard(
+      if (kept === 'stuck') {
+        const stays = await life.guard(
           inTurn(async () => {
-            signIn++
+            if (!(await life.guard(holds(next)))) return false
+            if (ended) orphan = next
+            else signIn++
+            return !ended
           }),
         )
-        tell()
-        return true
+        if (stays) {
+          tell()
+          return true
+        }
       }
-      if (kept === 'stuck') orphaned = true
       if (kept === 'unkept') throw new Error('The sign-in could not be kept on this phone')
       return signal.throwIfAborted() as never
     },

@@ -502,4 +502,49 @@ describe('the Google sign-in on the phone', () => {
     expect(made.account.signIn()).not.toBe(before)
     expect(await made.account.known()).toBe(true)
   })
+
+  it.each(['ends the first', 'cannot be told'])(
+    'A5: leaves a new sign-in alone when Google %s only after the user connected again: the clean-up of a cancelled connect owns nothing but its own sign-in',
+    async outcome => {
+      const side = googleSide()
+      let kept: string | null = null
+      let removable = false
+      let release: (() => void) | null = null
+      const place: GooglePlace = {
+        load: async () => kept,
+        save: async next => {
+          if (next === null && !removable) throw new Error('the store is full')
+          if (next !== null && release === null) await new Promise<void>(resolve => (release = resolve))
+          kept = next
+        },
+      }
+      const revoking: (() => void)[] = []
+      const ask: typeof fetch = async (input, init) => {
+        if (!String(input).includes('/revoke')) return side.ask(input, init)
+        await new Promise<void>(resolve => revoking.push(resolve))
+        if (outcome === 'cannot be told') throw new Error('offline')
+        return side.ask(input, init)
+      }
+      const account = googleAccount(new Lifetime(), { relay: 'https://relay.example', place, ask, now: () => 1_800_000_000_000 })
+      const leaving = new AbortController()
+      const first = account.finish(side.consent(await account.begin()), leaving.signal).catch(() => 'left')
+      await until(() => release !== null)
+      leaving.abort()
+      release!()
+      await until(() => revoking.length === 1)
+      removable = true
+      expect(await account.finish(side.consent(await account.begin()), live())).toBe(true)
+      const second = kept
+      const generation = account.signIn()
+      let told = 0
+      account.onChange(() => told++)
+      revoking[0]()
+      expect(await first).toBe('left')
+      expect(await account.known()).toBe(true)
+      expect(kept).toBe(second)
+      expect(account.signIn()).toBe(generation)
+      expect(told).toBe(0)
+      expect((await account.token(generation, live())).value).toMatch(/^access-/)
+    },
+  )
 })
