@@ -27,15 +27,16 @@ export class SignIn {
   readonly #life: Lifetime
   readonly #account: Account
   readonly #listeners = new Set<() => void>()
-  readonly #changed: (who: Who | null) => void
+  readonly #changed: (who: Who | null, ended?: boolean) => void
   #view: SignInView = { step: 'checking', busy: true, problem: null, name: null }
   #attempt = new AbortController()
 
-  constructor(life: Lifetime, account: Account, changed: (who: Who | null) => void) {
+  constructor(life: Lifetime, account: Account, changed: (who: Who | null, ended?: boolean) => void) {
     this.#life = life
     this.#account = account
     this.#changed = changed
     life.own(() => this.#attempt.abort())
+    life.own(account.onEnded(() => this.#ended()))
   }
 
   view(): SignInView {
@@ -57,7 +58,7 @@ export class SignIn {
   async retry(): Promise<void> {
     if (this.#view.step !== 'offline' || this.#view.busy) return
     const who = await this.start(true)
-    if (who || this.view().step === 'phone') this.#changed(who)
+    if (who || this.view().step === 'phone') this.#changed(who, !who)
   }
 
   async phone(number: string): Promise<void> {
@@ -102,6 +103,14 @@ export class SignIn {
     if (attempt.signal.aborted) return
     this.#show({ step: 'phone', problem: told === 'told' ? null : SIGNED_OUT_HERE })
     this.#changed(null)
+  }
+
+  #ended(): void {
+    if (this.#view.step !== 'in') return
+    this.#attempt.abort()
+    this.#attempt = new AbortController()
+    this.#show({ step: 'phone', problem: ENDED })
+    this.#changed(null, true)
   }
 
   #stayed(who: Who): void {

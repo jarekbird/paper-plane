@@ -30,6 +30,7 @@ import type { Chat, Message, Messenger, Sponsored, Writer } from '../messenger.t
 import { addressed, commandOf, findNamed, sameWords } from '../names.ts'
 import type { Phrases } from '../phrases.ts'
 import { quickReplies } from '../replies.ts'
+import { troubleWords } from '../trouble.ts'
 
 export interface Hearing {
   transcribe: VoiceOptions['transcribe']
@@ -183,9 +184,11 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let lines = wrapText(words, SCREEN_WIDTH)
     const scroll = scroller(() => lines, redraw)
     let state: 'ready' | 'writing' | 'sending' | 'failed' | 'sent' | 'keeping' | 'kept' = 'ready'
+    let attempt = {}
     let unwritten = spoken && writer !== undefined && instructed(asSaid)
     const show = (text: string) => {
       words = text
+      attempt = {}
       lines = wrapText(words, SCREEN_WIDTH)
       scroll.reset()
     }
@@ -213,19 +216,22 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         if (!screen) return
         state = 'sending'
         redraw()
-        let sent: Message
+        let sent: Message | null
         try {
-          sent = await screen.guard(messenger.send(id, words))
+          sent = await screen.guard(messenger.send(id, words, attempt))
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = 'failed'
           redraw()
+          const why = troubleWords(error, '')
+          if (why) shell.notice(why)
           return
         }
         state = 'sent'
         if (router.current === self) router.back()
         else redraw()
-        sentIn.get(id)?.(sent)
+        if (sent) sentIn.get(id)?.(sent)
+        else shell.notice(WORDS.sent)
       },
     })
     const keep = action({
@@ -245,7 +251,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         } catch (error) {
           if (error instanceof LifetimeEnded) return
           state = before
-          shell.notice(WORDS.notKept)
+          shell.notice(troubleWords(error, WORDS.notKept))
           return
         }
         if (!kept) {
@@ -328,6 +334,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
   const chatScreen = (id: string): Screen => {
     let messages: Message[] | null = null
     let failed = false
+    let why = WORDS.noLoad
     let started = 0
     let readUpTo: string | null | undefined
     let seenClear: string | null = null
@@ -336,6 +343,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     let undo: { message: Message; timer: Timer } | null = null
     let screen: Lifetime | null = null
     let answers: Screen | null = null
+    const attempts = new Map<string, object>()
     const channel = inbox.chat(id)?.kind === 'channel'
     let ad: Sponsored | null = null
     let adAsked = false
@@ -347,7 +355,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       blocks: { message: Message; from: number; to: number }[]
       ad: { from: number; to: number } | null
     } => {
-      if (failed) return { lines: [WORDS.noLoad], blocks: [], ad: null }
+      if (failed) return { lines: wrapText(why, SCREEN_WIDTH), blocks: [], ad: null }
       if (messages === null) return { lines: [WORDS.loading], blocks: [], ad: null }
       if (messages.length === 0) return { lines: [WORDS.noMessages], blocks: [], ad: null }
       const chat = inbox.chat(id)
@@ -387,6 +395,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         if (error instanceof LifetimeEnded || turn !== started) return
         pending = false
         failed = true
+        why = troubleWords(error, WORDS.noLoad)
         redraw()
         return
       }
@@ -453,10 +462,20 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         try {
           await screen.guard(messenger.unsend(pending.message))
         } catch (error) {
-          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notUndone)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notUndone))
           return
         }
         shell.notice(WORDS.undone)
+      },
+    })
+
+    const again = action({
+      id: 'reload',
+      say: 'Try again',
+      hint: 'Loads this chat again',
+      blocked: () => (pending ? WORDS.loading : null),
+      run: () => {
+        if (screen) void load(screen)
       },
     })
 
@@ -486,7 +505,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           await entered.guard(spec.act(message))
         } catch (error) {
           acting = false
-          if (!(error instanceof LifetimeEnded)) shell.notice(spec.failed)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, spec.failed))
           return
         }
         acting = false
@@ -555,23 +574,28 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
           return
         }
         sending = true
-        let message: Message
+        const attempt = attempts.get(text) ?? {}
+        attempts.set(text, attempt)
+        let message: Message | null
         try {
-          message = await screen.guard(messenger.send(id, text))
+          message = await screen.guard(messenger.send(id, text, attempt))
+          attempts.delete(text)
         } catch (error) {
           sending = false
-          if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notSent)
+          if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notSent))
           return
         }
         sending = false
         if (router.current === answers) router.back()
-        sent(message)
+        if (message) sent(message)
+        else shell.notice(WORDS.sent)
       },
     })
 
     const self: Screen = {
       id: `chat:${id}`,
-      actions: () => (channel ? [like, save, scroll.down, scroll.up] : [reply, like, save, takeBack, scroll.down, scroll.up]),
+      actions: () =>
+        failed ? [again, takeBack] : channel ? [like, save, scroll.down, scroll.up] : [reply, like, save, takeBack, scroll.down, scroll.up],
       context: () => 'One chat, newest message first',
       enter: entered => {
         screen = entered
@@ -592,11 +616,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         void load(entered)
       },
       view: () =>
-        channel
-          ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
-          : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
-              on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
-            }),
+        failed
+          ? boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToRetry), { on: { tap: undo ? takeBack : again } })
+          : channel
+            ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
+            : boxes(page(titleOf(id), scroll.shown(), undo ? WORDS.undo : WORDS.tapToReply), {
+                on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
+              }),
     }
     if (!channel) chatOn.set(self, { chat: id, covers: false })
     return self
@@ -663,7 +689,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       .map(chat => chat.id)
       .sort()
   const markRead = async (ids: readonly string[]) => {
-    await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+    try {
+      await life.guard(Promise.all(ids.map(id => messenger.read(id))))
+    } catch (error) {
+      if (!(error instanceof LifetimeEnded)) shell.notice(troubleWords(error, WORDS.notRead))
+      return
+    }
+    redraw()
   }
 
   const readAll = action<readonly string[]>({
@@ -676,10 +708,7 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       const ids = unread()
       return [{ id: ids.join(' '), say: WORDS.listedChats, value: ids }]
     },
-    choose: () =>
-      void markRead(unread()).then(redraw, error => {
-        if (!(error instanceof LifetimeEnded)) shell.notice(WORDS.notRead)
-      }),
+    choose: () => void markRead(unread()),
     run: markRead,
   })
 
@@ -687,7 +716,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     home: {
       id: 'chats',
       context: () => 'The list of chats',
-      view: () => list({ title: parts.title ?? WORDS.title, action: open, empty: inbox.problem ?? WORDS.noChats }),
+      view: () =>
+        list({
+          title: inbox.problem && inbox.picked().length ? inbox.problem : (parts.title ?? WORDS.title),
+          action: open,
+          empty: inbox.problem ?? WORDS.noChats,
+        }),
     },
     actions: () => [open, message, readAll],
   })

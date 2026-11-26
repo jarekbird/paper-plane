@@ -1,5 +1,6 @@
 import { LifetimeEnded, type Lifetime, type Store } from 'earshot'
 import type { Chat, Messenger } from './messenger.ts'
+import { troubleWords } from './trouble.ts'
 
 export class Inbox {
   readonly #life: Lifetime
@@ -84,7 +85,7 @@ export class Inbox {
       this.#problem = null
     } catch (error) {
       if (error instanceof LifetimeEnded) return
-      this.#problem = 'Telegram is not answering'
+      this.#problem = troubleWords(error, 'Telegram is not answering')
     }
     this.#tell()
   }

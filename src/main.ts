@@ -3,6 +3,7 @@ import { Lifetime, scriptedSpeech } from 'earshot'
 import { startApp } from './app.ts'
 import { demoAccount } from './demo/account.ts'
 import { DEMO_PICKS, demoMessenger } from './demo/messenger.ts'
+import { stage } from './demo/trouble.ts'
 import { demoWriter } from './demo/writer.ts'
 import { display } from './glasses/display.ts'
 import { launch } from './launch.ts'
@@ -22,8 +23,16 @@ const life = new Lifetime()
 const bridge = await waitForEvenAppBridge()
 const { store, sessions } = appStore(bridge)
 
+const samples = demoMessenger()
+
 async function ownAccount() {
-  if (how.own === 'sample') return { account: demoAccount({ signedIn: false }), messenger: demoMessenger() }
+  if (how.own === 'sample') {
+    const account = demoAccount({ signedIn: how.trouble === 'ended' })
+    const messenger = demoMessenger()
+    if (how.trouble) stage(life, how.trouble, { messengers: [samples, messenger], account })
+    return { account, messenger }
+  }
+  if (how.trouble) stage(life, how.trouble, { messengers: [samples] })
   if (!id || !hash) return undefined
   const { telegram } = await life.guard(import('./telegram/client.ts'))
   return telegram(life, { apiId: Number(id), apiHash: hash }, sessions)
@@ -34,7 +43,7 @@ await startApp({
   life,
   display: display(life, bridge, { trace: how.trace }),
   store,
-  sample: { messenger: demoMessenger(), picks: DEMO_PICKS },
+  sample: { messenger: samples, picks: DEMO_PICKS },
   ...(own ? { telegram: own } : {}),
   ...(hearing ? { hearing } : {}),
   ...(writer ? { writer } : {}),

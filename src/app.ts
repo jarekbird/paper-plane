@@ -7,6 +7,7 @@ import type { PhoneParts } from './phone/page.ts'
 import type { Build } from './phone/privacy.ts'
 import { SignIn } from './phone/signin.ts'
 import { Phrases } from './phrases.ts'
+import { UNREACHABLE } from './trouble.ts'
 
 export type Scope = 'sample' | 'telegram' | 'connecting' | 'offline'
 
@@ -32,8 +33,9 @@ const NOTES = {
   sample: 'These are sample chats. Pick the ones you want on your glasses.',
   telegram: 'Pick the chats you want on your glasses.',
   connecting: 'Connecting to Telegram…',
-  offline: 'Cannot reach Telegram',
+  offline: UNREACHABLE,
 }
+const ENDED = 'Signed out of Telegram'
 const SAMPLE_TITLE = 'Sample chats'
 
 export async function startApp(parts: AppParts): Promise<App> {
@@ -54,7 +56,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     phone?.(session, { inbox: null, phrases, signIn, note: NOTES.connecting, build })
   }
 
-  const show = (who: Who | null) => {
+  const show = (who: Who | null, ended = false) => {
     session.end()
     session = life.child()
     const current = session
@@ -62,7 +64,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     const opened = new Inbox(current, messenger, store, who ? `telegram:${who.id}` : 'sample')
     scope = who ? 'telegram' : 'sample'
     inbox = opened
-    startGlasses(current, display, {
+    const { shell } = startGlasses(current, display, {
       ...(who ? {} : { title: SAMPLE_TITLE }),
       inbox: opened,
       messenger,
@@ -70,6 +72,7 @@ export async function startApp(parts: AppParts): Promise<App> {
       ...(hearing ? { hearing } : {}),
       ...(writer ? { writer } : {}),
     })
+    if (ended && !who) shell.notice(ENDED)
     phone?.(current, { inbox: opened, phrases, signIn, note: NOTES[scope], build })
     const fill = async () => {
       await current.guard(opened.start())
@@ -118,7 +121,7 @@ export async function startApp(parts: AppParts): Promise<App> {
     }
     if (who) show(who)
     else if (known && model.view().step === 'offline') offline(model)
-    else if (known) show(null)
+    else if (known) show(null, true)
   }
   if (signIn) void restore(signIn)
   return { signIn, scope: () => scope, inbox: () => inbox }

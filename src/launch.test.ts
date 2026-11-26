@@ -26,4 +26,13 @@ describe('how the app is started', () => {
     expect(launch('#say=open sam|go back', {}).said).toEqual(['open sam', 'go back'])
     expect(launch('', {}).said).toBeNull()
   })
+
+  it('stages trouble for the simulator on sample chats only, never on the user’s own', () => {
+    expect(launch('#trouble=unreachable', {}).trouble).toBe('unreachable')
+    expect(launch('#trouble=wait', {}).trouble).toBe('wait')
+    expect(launch('#account=sample&trouble=ended', APP).trouble).toBe('ended')
+    expect(launch('#trouble=unreachable', APP).trouble).toBeNull()
+    expect(launch('#trouble=anything', {}).trouble).toBeNull()
+    expect(launch('', {}).trouble).toBeNull()
+  })
 })

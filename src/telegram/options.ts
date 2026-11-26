@@ -1,4 +1,4 @@
-import { MemoryStorage } from '@mtcute/core'
+import { MemoryStorage, networkMiddlewares } from '@mtcute/core'
 import { LogManager } from '@mtcute/core/utils.js'
 import { WebCryptoProvider, WebPlatform } from '@mtcute/web'
 import { webSockets } from './transport.ts'
@@ -16,4 +16,5 @@ export const clientOptions = (app: TelegramApp) => ({
   crypto: new WebCryptoProvider(),
   platform: new WebPlatform(),
   transport: webSockets,
+  network: { middlewares: networkMiddlewares.basic({ internalErrors: { exceptErrors: ['RANDOM_ID_DUPLICATE'] } }) },
 })

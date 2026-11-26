@@ -44,6 +44,8 @@ side by side.
 
 - The page's hash sets the run (`src/main.ts`): `trace` makes Earshot log each frame, which `shows`, `shown`, `menu`
   and `pick` read; `say=<line>|<line>` makes each hold hear the next line, with no microphone and no service.
+  `trouble=unreachable` or `trouble=wait` puts the sample chats in that trouble from second 8 to second 30 after
+  launch; `account=sample&trouble=ended` starts signed in to the sample sign-in and ends it at second 8.
 - With `Simulator.start({ url, mic: true })` the simulator's microphone hears a steady tone, so `hold` records.
 - The app runs on the demo account. Never point a run at a real Telegram or Google account but Jarek's, and only
   when he asks; the console and screenshots of such a run are never committed (S4).

@@ -28,7 +28,7 @@ export interface Sponsored {
 export interface Messenger {
   chats(): Promise<Chat[]>
   history(chat: string, limit: number): Promise<Message[]>
-  send(chat: string, text: string): Promise<Message>
+  send(chat: string, text: string, attempt?: object): Promise<Message | null>
   read(chat: string): Promise<void>
   unsend(message: Message): Promise<void>
   keep(chat: string, text: string, signal: AbortSignal): Promise<boolean>
@@ -37,6 +37,17 @@ export interface Messenger {
   sponsored(chat: string): Promise<Sponsored | null>
   sawSponsored(sponsored: Sponsored): Promise<void>
   onChange(told: () => void): () => void
+}
+
+export type Trouble = { kind: 'unreachable' } | { kind: 'wait'; seconds: number }
+
+export class TroubleError extends Error {
+  readonly trouble: Trouble
+
+  constructor(trouble: Trouble) {
+    super(trouble.kind)
+    this.trouble = trouble
+  }
 }
 
 export type SignInProblem = 'phone' | 'code' | 'expired' | 'password' | 'wait' | 'other'
@@ -62,6 +73,7 @@ export interface Account {
   giveCode(code: string, signal: AbortSignal): Promise<Who | 'password'>
   givePassword(password: string, signal: AbortSignal): Promise<Who>
   signOut(): Promise<'told' | 'untold'>
+  onEnded(told: () => void): () => void
 }
 
 export interface Writer {

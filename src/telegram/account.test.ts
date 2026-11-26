@@ -1,8 +1,9 @@
-import { Lifetime } from 'earshot'
+import { Lifetime, memoryPlace } from 'earshot'
 import { tl } from '@mtcute/core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { accountContract } from '../account.contract.ts'
-import { SignInError } from '../messenger.ts'
+import { SignInError, TroubleError } from '../messenger.ts'
+import { storeOver } from '../store.ts'
 import { accountOver, type AuthClientLike, type SessionPlace } from './account.ts'
 
 const PHONE = '+15550100199'
@@ -11,6 +12,7 @@ const PASSWORD = 'correct horse'
 const NAME = 'Anna Lee'
 const ME = { id: 4242, displayName: NAME }
 const live = () => new AbortController().signal
+const turn = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 const refuse = (text: string): never => {
   throw new tl.RpcError(400, text as never)
 }
@@ -77,6 +79,11 @@ for (const twoStep of [false, true]) {
     const made = world(twoStep)
     return {
       account: made.account,
+      endElsewhere: async () => {
+        made.side.revokeAll()
+        made.account.ended(made.account.era())
+        await turn()
+      },
       again: () => accountOver(new Lifetime(), made.side.client(), made.place),
       phone: PHONE,
       badPhone: '12',
@@ -354,5 +361,334 @@ describe('the Telegram account', () => {
     life.end()
     await account.giveCode(CODE, live()).catch(() => {})
     expect(saved).toBeNull()
+  })
+
+  it('forgets a sign-in Telegram ended while the app was running, and drops its connection so nothing keeps asking under it', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.side.revokeAll()
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toBeNull()
+    expect(made.first.drops).toBe(1)
+  })
+
+  it('A5: does not end a new sign-in on a late answer to a call made under an earlier one', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const earlier = made.account.era()
+    await made.account.signOut()
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(earlier)
+    await turn()
+    expect(told).toBe(0)
+    expect(made.saved()).toMatch(/^session-/)
+    expect(made.first.drops).toBe(0)
+  })
+
+  it('notices an ended sign-in after a launch that restored it', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = accountOver(new Lifetime(), made.side.client(), made.place)
+    await next.restore()
+    let told = 0
+    next.onEnded(() => told++)
+    next.ended(next.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toBeNull()
+  })
+
+  it('is not ended before anyone signed in', async () => {
+    const made = world(false)
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(0)
+    expect(made.first.drops).toBe(0)
+  })
+
+  it('gives up asking for a code when Telegram does not answer in fifteen seconds, so the user can try again', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      const sendCode = made.first.sendCode
+      made.first.sendCode = () => new Promise(() => {})
+      const asking = made.account.askCode(PHONE, live()).catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(await asking).toMatchObject({ problem: 'other' })
+      made.first.sendCode = sendCode
+      expect(await made.account.askCode(PHONE, live())).toBe('code')
+      expect(await made.account.giveCode(CODE, live())).toEqual({ id: '4242', name: NAME })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A4: stops asking for a code at the limit, and when the user leaves, so two requests for a code never overlap', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      const given: AbortSignal[] = []
+      made.first.sendCode = ({ abortSignal }) => {
+        given.push(abortSignal)
+        return new Promise(() => {})
+      }
+      void made.account.askCode(PHONE, live()).catch(() => {})
+      await vi.advanceTimersByTimeAsync(14_999)
+      expect(given[0].aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(given[0].aborted).toBe(true)
+      const left = new AbortController()
+      void made.account.askCode(PHONE, left.signal).catch(() => {})
+      await vi.advanceTimersByTimeAsync(0)
+      expect(given[1].aborted).toBe(false)
+      left.abort()
+      expect(given[1].aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives up restoring a sign-in when Telegram does not answer in fifteen seconds, and keeps the sign-in for the next try', async () => {
+    vi.useFakeTimers()
+    try {
+      const made = world(false)
+      await made.account.askCode(PHONE, live())
+      await made.account.giveCode(CODE, live())
+      const silent = made.side.client()
+      let answer = () => {}
+      const getMe = silent.getMe
+      silent.getMe = () => new Promise(resolve => (answer = () => resolve(getMe())))
+      const restoring = accountOver(new Lifetime(), silent, made.place)
+        .restore()
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(14_999)
+      expect(silent.loops).toBe(0)
+      await vi.advanceTimersByTimeAsync(1)
+      const failure = await restoring
+      expect(failure).toBeInstanceOf(TroubleError)
+      expect((failure as TroubleError).trouble).toEqual({ kind: 'unreachable' })
+      expect(made.saved()).toMatch(/^session-/)
+      answer()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(silent.loops).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A4: asks Telegram nothing more for a launch once the app has ended', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = made.side.client()
+    let imported = () => {}
+    let asked = 0
+    const getMe = next.getMe
+    next.importSession = () => new Promise<void>(resolve => (imported = resolve))
+    next.getMe = async () => {
+      asked++
+      return getMe()
+    }
+    const life = new Lifetime()
+    const restoring = accountOver(life, next, made.place)
+      .restore()
+      .catch(() => 'ended')
+    await turn()
+    life.end()
+    imported()
+    expect(await restoring).toBe('ended')
+    await turn()
+    expect(asked).toBe(0)
+    expect(next.loops).toBe(0)
+  })
+
+  it('S3: keeps trying to remove an ended sign-in the phone could not forget, and does not count it as a sign-in meanwhile', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.side.revokeAll()
+    made.account.ended(made.account.era())
+    await turn()
+    expect(told).toBe(1)
+    expect(made.saved()).toMatch(/^session-/)
+    expect(await made.account.known()).toBe(false)
+    expect(await made.account.restore()).toBeNull()
+    made.place.save = save
+    expect(await made.account.known()).toBe(false)
+    expect(made.saved()).toBeNull()
+  })
+
+  it('keeps a new sign-in made while the ended one could not be removed', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    made.place.save = async () => {
+      throw new Error('the store is full')
+    }
+    made.account.ended(made.account.era())
+    await turn()
+    made.place.save = save
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    expect(await made.account.known()).toBe(true)
+    expect(made.saved()).toMatch(/^session-/)
+  })
+
+  it.each(['succeeds', 'fails'] as const)(
+    'A5: keeps a sign-in made while an ended one was still being forgotten, with its own connection, when that forgetting %s late',
+    async outcome => {
+      const made = world(false)
+      await made.account.askCode(PHONE, live())
+      await made.account.giveCode(CODE, live())
+      const save = made.place.save
+      let settle = () => {}
+      made.place.save = () =>
+        new Promise<void>((resolve, reject) => {
+          settle = outcome === 'succeeds' ? () => void save(null).then(resolve) : () => reject(new Error('the store is full'))
+        })
+      made.account.ended(made.account.era())
+      await turn()
+      expect(made.first.drops).toBe(1)
+      made.place.save = save
+      await made.account.askCode(PHONE, live())
+      const entering = made.account.giveCode(CODE, live())
+      await turn()
+      let told = 0
+      made.account.onEnded(() => told++)
+      settle()
+      expect(await entering).toEqual({ id: '4242', name: NAME })
+      await turn()
+      expect(made.first.drops).toBe(1)
+      expect(told).toBe(0)
+      expect(await made.account.known()).toBe(true)
+      expect(made.saved()).toMatch(/^session-/)
+    },
+  )
+
+  it('A4: leaves no failure unheard when the app ends while an ended sign-in is still being forgotten and its connection dropped', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const next = made.side.client()
+    next.drop = () => new Promise(() => {})
+    const life = new Lifetime()
+    const account = accountOver(life, next, { load: made.place.load, save: () => new Promise(() => {}) })
+    await account.restore()
+    const unheard: unknown[] = []
+    const hear = (reason: unknown) => void unheard.push(reason)
+    process.on('unhandledRejection', hear)
+    try {
+      account.ended(account.era())
+      await turn()
+      life.end()
+      await new Promise(resolve => setTimeout(resolve, 20))
+    } finally {
+      process.off('unhandledRejection', hear)
+    }
+    expect(unheard).toEqual([])
+  })
+
+  it('tells listeners at once that the sign-in ended, also when a sign-out the user starts next fails on every side', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    await made.account.giveCode(CODE, live())
+    const save = made.place.save
+    let fail = () => {}
+    made.place.save = session =>
+      session === null ? new Promise<void>((_, reject) => (fail = () => reject(new Error('full')))) : save(session)
+    made.first.logOut = async () => refuse('AUTH_KEY_UNREGISTERED')
+    let told = 0
+    made.account.onEnded(() => told++)
+    made.account.ended(made.account.era())
+    expect(told).toBe(1)
+    const leaving = made.account.signOut().catch((error: unknown) => error)
+    await turn()
+    fail()
+    await turn()
+    fail()
+    expect(await leaving).toBeInstanceOf(SignInError)
+    expect(told).toBe(1)
+    expect(await Promise.race([made.account.known(), turn().then(() => 'waiting')])).toBe('waiting')
+    made.place.save = save
+    fail()
+    expect(await made.account.known()).toBe(false)
+  })
+
+  it('S3: keeps a new sign-in when one copy of the ended one could not be removed and the other is removed late', async () => {
+    const side = telegramSide(false)
+    const even = memoryPlace()
+    const web = memoryPlace()
+    const held: (() => void)[] = []
+    let holding = false
+    let webWrites = true
+    const { sessions } = storeOver([
+      {
+        read: key => even.read(key),
+        write: async (key, text) => {
+          if (holding) await new Promise<void>(resolve => held.push(resolve))
+          return even.write(key, text)
+        },
+      },
+      { read: key => web.read(key), write: (key, text) => (webWrites ? web.write(key, text) : Promise.reject(new Error('unwritable'))) },
+    ])
+    const account = accountOver(new Lifetime(), side.client(), sessions)
+    await account.askCode(PHONE, live())
+    await account.giveCode(CODE, live())
+    webWrites = false
+    holding = true
+    account.ended(account.era())
+    await turn()
+    holding = false
+    await account.askCode(PHONE, live())
+    const entering = account.giveCode(CODE, live())
+    await turn()
+    for (const release of held) release()
+    expect(await entering).toEqual({ id: '4242', name: NAME })
+    await turn()
+    expect(await account.known()).toBe(true)
+    expect(await sessions.load()).toMatch(/^session-/)
+  })
+
+  it('A4: writes nothing more to the phone once the app has ended, also what was waiting its turn', async () => {
+    const made = world(false)
+    await made.account.askCode(PHONE, live())
+    const save = made.place.save
+    const written: (string | null)[] = []
+    let first = () => {}
+    made.place.save = async session => {
+      written.push(session)
+      if (written.length === 1) await new Promise<void>(resolve => (first = resolve))
+      return save(session)
+    }
+    const life = new Lifetime()
+    const account = accountOver(life, made.first, made.place)
+    await account.askCode(PHONE, live())
+    void account.giveCode(CODE, live()).catch(() => {})
+    await turn()
+    void account.signOut().catch(() => {})
+    await turn()
+    life.end()
+    first()
+    await turn()
+    expect(written).toHaveLength(1)
   })
 })

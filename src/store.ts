@@ -19,7 +19,8 @@ export function storeOver(places: readonly Place[]): AppStore {
       load: () => store.get(SESSION_KEY),
       save: async session => {
         if (session !== null) return store.set(SESSION_KEY, session)
-        await Promise.all(each.map(one => one.remove(SESSION_KEY)))
+        const removals = await Promise.allSettled(each.map(one => one.remove(SESSION_KEY)))
+        for (const removal of removals) if (removal.status === 'rejected') throw removal.reason
       },
     },
   }

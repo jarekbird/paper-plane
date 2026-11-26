@@ -1,6 +1,8 @@
 import { LifetimeEnded, type Lifetime } from 'earshot'
 import { tl } from '@mtcute/core'
 import { SignInError, type Account, type SignInProblem, type Who } from '../messenger.ts'
+import type { SignedIn } from './messenger.ts'
+import { ANSWER_MS, answerWithin, signedOut } from './trouble.ts'
 
 export interface SessionPlace {
   load(): Promise<string | null>
@@ -34,7 +36,6 @@ const PROBLEMS: [code: string, problem: SignInProblem][] = [
   ['FLOOD_WAIT_%d', 'wait'],
   ['PHONE_PASSWORD_FLOOD', 'wait'],
 ]
-const SIGNED_OUT = ['AUTH_KEY_UNREGISTERED', 'SESSION_REVOKED', 'USER_DEACTIVATED']
 
 function problemOf(error: unknown): SignInError {
   if (error instanceof SignInError) return error
@@ -42,8 +43,56 @@ function problemOf(error: unknown): SignInError {
   return new SignInError('other')
 }
 
-export function accountOver(life: Lifetime, client: AuthClientLike, place: SessionPlace): Account {
+export function accountOver(life: Lifetime, client: AuthClientLike, place: SessionPlace): Account & SignedIn {
+  const within = answerWithin(life, ANSWER_MS)
+  const listeners = new Set<() => void>()
   let pending: { phone: string; hash: string } | null = null
+  let era = 0
+  let inside = false
+  let stale = false
+  let turn: Promise<void> = Promise.resolve()
+
+  const inTurn = async <T>(work: () => Promise<T>): Promise<T> => {
+    const before = turn
+    let free = () => {}
+    turn = new Promise<void>(resolve => (free = resolve))
+    try {
+      await life.guard(before)
+      return await life.guard(work())
+    } finally {
+      free()
+    }
+  }
+
+  const write = (session: string | null): Promise<void> =>
+    inTurn(async () => {
+      await life.guard(place.save(session))
+      stale = false
+    })
+
+  const forgotten = (): Promise<boolean> =>
+    inTurn(async () => {
+      if (!stale) return true
+      stale = !(await life.guard(done(() => place.save(null))))
+      return !stale
+    })
+
+  const enter = (user: UserLike): Who => {
+    era++
+    inside = true
+    return { id: String(user.id), name: user.displayName }
+  }
+
+  const end = (at: number) => {
+    if (!inside || at !== era) return
+    era++
+    inside = false
+    pending = null
+    stale = true
+    void forgotten().catch(() => {})
+    void done(() => client.drop()).catch(() => {})
+    for (const told of [...listeners]) told()
+  }
 
   const done = async (work: () => Promise<unknown>): Promise<boolean> => {
     try {
@@ -56,21 +105,21 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
   }
 
   const forget = async (): Promise<boolean> => {
-    const removed = await life.guard(done(() => place.save(null)))
+    const removed = await life.guard(done(() => write(null)))
     const ended = await life.guard(done(async () => client.logOut()))
     if (removed && !ended) await life.guard(done(() => client.drop()))
     return removed || ended
   }
 
   const entered = async (user: UserLike, signal: AbortSignal): Promise<Who> => {
-    const who = { id: String(user.id), name: user.displayName }
     let stored = false
     let failed = false
     try {
       if (!signal.aborted) {
         const session = await life.guard(client.exportSession())
         if (!signal.aborted) {
-          await life.guard(place.save(session))
+          await life.guard(forgotten())
+          await life.guard(write(session))
           stored = true
         }
         if (!signal.aborted) await life.guard(client.startUpdatesLoop())
@@ -81,34 +130,36 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     }
     if (!failed && !signal.aborted) {
       pending = null
-      return who
+      return enter(user)
     }
     const gone = await life.guard(forget())
-    if (!gone && stored) return who
+    if (!gone && stored) return enter(user)
     if (signal.aborted) return signal.throwIfAborted() as never
     throw new SignInError('other')
   }
 
   return {
-    known: async () => (await life.guard(place.load())) !== null,
+    known: async () => (await life.guard(forgotten())) && (await life.guard(place.load())) !== null,
     restore: async () => {
+      if (!(await life.guard(forgotten()))) return null
       const saved = await life.guard(place.load())
       if (saved === null) return null
+      let me: UserLike
       try {
-        await life.guard(client.importSession(saved, true))
-        const me = await life.guard(client.getMe())
-        await life.guard(client.startUpdatesLoop())
-        return { id: String(me.id), name: me.displayName }
+        await life.guard(within(() => client.importSession(saved, true)))
+        me = await life.guard(within(() => client.getMe()))
+        await life.guard(within(() => client.startUpdatesLoop()))
       } catch (error) {
-        if (!SIGNED_OUT.some(code => tl.RpcError.is(error, code))) throw error
-        await life.guard(place.save(null))
+        if (!signedOut(error)) throw error
+        await life.guard(write(null))
         return null
       }
+      return enter(me)
     },
     askCode: async (phone, signal) => {
       let sent: { phoneCodeHash: string } | UserLike
       try {
-        sent = await life.guard(client.sendCode({ phone, abortSignal: signal }))
+        sent = await life.guard(within(abortSignal => client.sendCode({ phone, abortSignal }), signal))
       } catch (error) {
         throw problemOf(error)
       }
@@ -139,12 +190,24 @@ export function accountOver(life: Lifetime, client: AuthClientLike, place: Sessi
     },
     signOut: async () => {
       pending = null
-      const removed = await life.guard(done(() => place.save(null)))
+      const was = inside
+      era++
+      inside = false
+      const removed = await life.guard(done(() => write(null)))
       const ended = await life.guard(done(async () => client.logOut()))
       if (ended) return 'told'
-      if (!removed) throw new SignInError('other')
+      if (!removed) {
+        inside = was
+        throw new SignInError('other')
+      }
       await life.guard(done(() => client.drop()))
       return 'untold'
     },
+    onEnded: told => {
+      listeners.add(told)
+      return () => void listeners.delete(told)
+    },
+    era: () => era,
+    ended: end,
   }
 }

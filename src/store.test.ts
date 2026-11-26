@@ -33,4 +33,33 @@ describe('where the sign-in is kept on the phone', () => {
     expect(await createStore([even.place]).get('telegram-session')).toBeNull()
     expect(await createStore([web.place]).get('telegram-session')).toBeNull()
   })
+
+  it('S3: is done removing only when every copy has answered, so a slow removal cannot land after a newer sign-in was kept', async () => {
+    const even = memoryPlace()
+    let release = () => {}
+    let holding = false
+    const slow: Place = {
+      read: key => even.read(key),
+      write: async (key, value) => {
+        if (holding) await new Promise<void>(resolve => (release = resolve))
+        return even.write(key, value)
+      },
+    }
+    const web = failing(memoryPlace())
+    const { sessions } = storeOver([slow, web.place])
+    await sessions.save('session-1')
+    holding = true
+    web.state.writes = false
+    let settled = false
+    const removing = sessions.save(null).then(
+      () => (settled = true),
+      () => (settled = true),
+    )
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    release()
+    await removing
+    expect(settled).toBe(true)
+    expect(await createStore([slow]).get('telegram-session')).toBeNull()
+  })
 })

@@ -10,6 +10,7 @@ export interface AccountWorld {
   badCode: string
   password: string | null
   badPassword: string
+  endElsewhere(): Promise<void>
 }
 
 const live = () => new AbortController().signal
@@ -93,6 +94,37 @@ export function accountContract(name: string, make: () => Promise<AccountWorld>)
       await world.account.giveCode(world.code, gone()).catch(() => {})
       expect(await world.again().known()).toBe(false)
       expect(await world.again().restore()).toBeNull()
+    })
+
+    it('tells listeners once when the sign-in is ended from another device, and is signed out for the next launch', async () => {
+      const world = await make()
+      await enter(world)
+      let told = 0
+      world.account.onEnded(() => told++)
+      await world.endElsewhere()
+      await world.endElsewhere()
+      expect(told).toBe(1)
+      expect(await world.again().known()).toBe(false)
+      expect(await world.again().restore()).toBeNull()
+    })
+
+    it('tells nobody that a sign-in ended when the user signed out here', async () => {
+      const world = await make()
+      await enter(world)
+      let told = 0
+      world.account.onEnded(() => told++)
+      await world.account.signOut()
+      await world.endElsewhere()
+      expect(told).toBe(0)
+    })
+
+    it('stops telling a listener that left that the sign-in ended', async () => {
+      const world = await make()
+      await enter(world)
+      let told = 0
+      world.account.onEnded(() => told++)()
+      await world.endElsewhere()
+      expect(told).toBe(0)
     })
   })
 }

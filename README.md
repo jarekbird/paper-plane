@@ -21,6 +21,7 @@ you say into a message), in one flow.
 | A thumbs-up, or a message saved      | Menu > Like, or Save (to Saved Messages); or say "like that"       |
 | A channel's posts                    | Tap the channel: its posts, then Telegram's sponsored message, as Telegram's terms ask |
 | Anything else by voice               | Hold and say it: "open launch crew", "message Sam the demo moved", "mark all read", "go back" |
+| What is wrong, when something is     | "Cannot reach Telegram", "Telegram says wait 2 minutes", "Signed out of Telegram": said on the glasses, and a reply you wrote stays until it can go |
 
 Nothing is ever sent on a model's word alone: every message shows its exact text and where it goes, and only your tap
 sends it. And no model ever reads your chats: AI works on what you say, never on what Telegram holds. What leaves the phone, in plain words: [PRIVACY.md](PRIVACY.md), and the same on the app's phone page.
@@ -55,6 +56,9 @@ npx evenhub-simulator http://127.0.0.1:5183           # Even's simulator, in a s
 
 In the simulator: swipe to move, tap to open a chat, double tap to go back. To try a spoken reply without a microphone
 or any service, open `http://127.0.0.1:5183/#say=See you at noon` instead: each hold then "hears" that sentence.
+To see what the glasses say when Telegram is in trouble, add `#trouble=unreachable` or `#trouble=wait`: the sample
+chats lose Telegram eight seconds after launch and have it back at thirty. `#account=sample&trouble=ended` starts
+signed in to the sample sign-in and ends it from "another device".
 
 ```sh
 npm run check   # format, lint, architecture rules, types, tests, build and Even Hub's store rules

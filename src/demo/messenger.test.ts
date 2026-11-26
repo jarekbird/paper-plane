@@ -11,6 +11,8 @@ messengerContract('the sample account', async () => {
     channel: 'news',
     saved: async () => messenger.saved().map(message => message.text),
     sponsoredSeen: async () => messenger.seenSponsored().length,
+    trouble: async next => messenger.trouble(next),
+    loseAnswer: async () => messenger.loseAnswer(),
   }
 })
 
