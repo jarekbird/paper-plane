@@ -27,6 +27,14 @@ describe('a chat said by name, found on the phone', () => {
     expect(ids('open glases news')).toEqual(['news'])
   })
 
+  it('does not take "the" or "chat" alone for a chat that only starts with it', () => {
+    const more = [...chats, { id: 'club', title: 'Chat club' }, { id: 'crew', title: 'The Crew' }]
+    expect(findNamed('open the door', more).matches).toEqual([])
+    expect(findNamed('the chat is quiet today', more).matches).toEqual([])
+    expect(findNamed('open the crew', more).matches.map(chat => chat.id)).toEqual(['crew'])
+    expect(findNamed('chat club', more).matches.map(chat => chat.id)).toEqual(['club'])
+  })
+
   it('does not take a short name for another word', () => {
     expect(ids('open same')).toEqual([])
     expect(ids('what is new')).toEqual([])
@@ -104,6 +112,26 @@ describe('a command read on the phone by its first word', () => {
     expect(addressed('Sam', chats).matches).toEqual([])
     expect(addressed('please message Sam see you there', chats)).toMatchObject({ matches: [chats[3]], rest: 'see you there' })
     expect(addressed('tell launch crew go home', chats)).toMatchObject({ matches: [chats[2]], rest: 'go home' })
+  })
+
+  it('finds the chat in "open the chat with Anna", as people say it, and still not in a sentence about something else (measured on speech: it asked "Which chat?")', () => {
+    expect(addressed('Open the chat with Sam.', chats).matches).toEqual([chats[3]])
+    expect(addressed('open my conversation with launch crew', chats).matches).toEqual([chats[2]])
+    expect(addressed('show me Sam', chats).matches).toEqual([chats[3]])
+    expect(addressed('open up the chat with Sam', chats).matches).toEqual([chats[3]])
+    expect(addressed('open the door for Sam', chats).matches).toEqual([])
+    expect(addressed('show the plan to Sam', chats).matches).toEqual([])
+    expect(addressed('message the chat with Sam hello', chats).matches).toEqual([])
+  })
+
+  it('does not take one of those words for a chat that only starts with it: "open the chat with Sam" is Sam, not "Chat club"', () => {
+    const more = [...chats, { id: 'club', title: 'Chat club' }, { id: 'crew', title: 'The Crew' }]
+    expect(addressed('open the chat with Sam', more).matches.map(chat => chat.id)).toEqual(['sam'])
+    expect(addressed('open the chat club', more).matches.map(chat => chat.id)).toEqual(['club'])
+    expect(addressed('open chat club', more).matches.map(chat => chat.id)).toEqual(['club'])
+    expect(addressed('open the crew', more).matches.map(chat => chat.id)).toEqual(['crew'])
+    expect(addressed('show me the crew', more).matches.map(chat => chat.id)).toEqual(['crew'])
+    expect(addressed('open the chat with Anna', more).matches.map(chat => chat.id)).toEqual(['anna', 'annab'])
   })
 
   it('does not take an ordinary word for a command word', () => {
