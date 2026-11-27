@@ -20,6 +20,7 @@ const WORD = /[\p{L}\p{N}]+/gu
 const LEAD = /^\s*[:,]?\s*/
 const FUZZY_FROM = 5
 const FIRST_NAME_FROM = 3
+const BEFORE_A_CHAT = new Set(['the', 'my', 'me', 'up', 'chat', 'conversation', 'with'])
 
 const tokensOf = (text: string): Token[] =>
   [...text.matchAll(WORD)].map(match => ({ text: match[0].toLowerCase(), end: match.index + match[0].length }))
@@ -62,7 +63,7 @@ export function findNamed<T extends Named>(words: string, named: readonly T[]): 
     const title = tokensOf(item.title).map(token => token.text)
     if (title.length === 0) continue
     const whole = firstRun(said, title)
-    const first = title.length > 1 && title[0].length >= FIRST_NAME_FROM ? firstRun(said, [title[0]]) : null
+    const first = title.length > 1 && title[0].length >= FIRST_NAME_FROM && !BEFORE_A_CHAT.has(title[0]) ? firstRun(said, [title[0]]) : null
     const run = [whole, first].filter(candidate => candidate !== null).sort(sooner)[0]
     if (run) found.push({ item, run })
   }
@@ -80,17 +81,22 @@ const VERBS = new Map<string, Command>([
   ['show', 'open'],
 ])
 
-const BEFORE_A_CHAT = new Set(['the', 'my', 'me', 'up', 'chat', 'conversation', 'with'])
+const NOBODY = { matches: [], rest: '', at: null }
 
 export function addressed<T extends Named>(words: string, named: readonly T[]): Found<T> {
-  const said = tokensOf(words).map(token => token.text)
+  const tokens = tokensOf(words)
+  const said = tokens.map(token => token.text)
   const verbAt = said.findIndex(word => VERBS.has(word))
-  const found = findNamed(words, named)
+  if (verbAt < 0) return NOBODY
   const opening = VERBS.get(said[verbAt]) === 'open'
   const from = verbAt + (!opening && said[verbAt + 1] === 'to' ? 2 : 1)
-  let last = from
-  while (opening && BEFORE_A_CHAT.has(said[last])) last++
-  return verbAt >= 0 && found.at !== null && found.at >= from && found.at <= last ? found : { matches: [], rest: '', at: null }
+  const found = findNamed(words, named)
+  if (found.at === from) return found
+  for (let at = from; opening && BEFORE_A_CHAT.has(said[at]); at++) {
+    const after = findNamed(words.slice(tokens[at].end), named)
+    if (after.at === 0) return { ...after, at: at + 1 }
+  }
+  return NOBODY
 }
 
 export function commandOf(words: string): Command | null {
