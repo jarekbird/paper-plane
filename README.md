@@ -46,15 +46,29 @@ This is a build in progress, during the hackathon week.
 
 - **Works today:** every screen and the voice flow above, against a built-in sample account, in Even's simulator.
   The voice relay is deployed, and both models were tried live (above).
-- **Tried on real Telegram (26 November), from the app in the simulator, writing only to Saved Messages:** signing
-  in with number and code, the list of chats (61 came back), staying signed in over a restart, signing out; a
-  reply sent, there within half a second of the tap, and undone; "Keep for later", which showed as the chat's
-  draft in Telegram Web. The words of each hold were scripted. Folders, mentions, channels, reactions and the
-  trouble paths have not been tried there yet.
+- **Tried on real Telegram (26 November), from the app in the simulator, on the author's own account, writing only
+  to Saved Messages, each result checked in Telegram Web:**
+  - signing in with number and code, the list of chats, staying signed in over a restart, signing out;
+  - a reply sent (there within half a second of the tap), left, and another undone; a reply said again to replace
+    it, and dropped by a double tap; a quick reply sent and undone;
+  - a message sent from another device showing on the open chat at once;
+  - "Keep for later" as the chat's draft; a like; "Save";
+  - by voice: "Open" and "Message" a chat by its name, "Go back", "Go home";
+  - a spoken reply through the real speech-to-text, sent and undone;
+  - Telegram cut off by a local proxy: "Cannot reach Telegram", "Not sent. Tap to try again", and exactly one copy
+    sent after it came back; a message that arrived meanwhile shown without reopening; a start with no network
+    saying so and recovering;
+  - with a test Google account connected beside Telegram: the next meeting on the list, a reply to a note with a
+    time that adds the meeting, and one undo taking back both.
+
+  Most holds had scripted words. Not tried there: folders, mentions and channels (the account has none picked for
+  it), "Telegram says wait", a sign-in ended from another device.
 - **Tried on real Google (26 November), with a test Google account, from the app in the simulator on the sample
   chats, through the deployed relay:** connecting by the code from the relay's page; the next meeting read from
   Google onto the list; a reply with "Send and add", after which the meeting was in Google Calendar; a second one
-  undone ("Taken back"), which left Google's calendar as it was; disconnecting. The app is in Google's testing
+  undone ("Taken back"), which left Google's calendar as it was; disconnecting; a wrong code and "Cancel"; entries
+  of every kind (all day: passed by; running: "now"; a long name: cut; no name: "Busy"); and, an hour later, the
+  key from Google renewed through the relay without a word to the user. The app is in Google's testing
   mode, so only the test accounts listed in its Google Cloud project can connect. Not tried: opening Google's
   sign-in from inside the Even app on a phone.
 - **Not proven yet:** a run on real glasses.
