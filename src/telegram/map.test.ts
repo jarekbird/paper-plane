@@ -15,6 +15,7 @@ const message = (over: Partial<MessageLike> = {}): MessageLike => ({
   sender: anna,
   media: null,
   reactions: null,
+  forward: null,
   ...over,
 })
 
@@ -29,6 +30,20 @@ describe('what Telegram says, as the app reads it', () => {
       mine: true,
       liked: false,
     })
+  })
+
+  it('takes a note in Saved Messages for the user’s own, though Telegram marks every message there as incoming, and a message forwarded there for someone else’s', () => {
+    const me: PeerLike = { type: 'user', id: 7, displayName: 'Jo Doe', isSelf: true }
+    expect(toMessage(message({ chat: me, sender: me })).mine).toBe(true)
+    expect(toMessage(message({ chat: me, sender: me, forward: {} })).mine).toBe(false)
+    expect(toMessage(message({ chat: anna, sender: anna })).mine).toBe(false)
+  })
+
+  it('calls the user’s own chat "Saved Messages", as Telegram does, not by the user’s name', () => {
+    const me: PeerLike = { type: 'user', id: 7, displayName: 'Jo Doe', isSelf: true }
+    const dialog = { peer: me, unreadCount: 0, unreadMentionsCount: 0, isArchived: false, lastMessage: null, draftMessage: null }
+    expect(toChat(dialog)).toMatchObject({ id: '7', title: 'Saved Messages', kind: 'person' })
+    expect(toChat({ ...dialog, peer: anna }).title).toBe('Anna Lee')
   })
 
   it('shows a message as liked only when the thumbs-up is the user’s own', () => {

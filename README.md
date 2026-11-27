@@ -36,9 +36,9 @@ sends it. And no model ever reads your chats: AI works on what you say, never on
 - **"Say it short": 93 of 102** instructions came back as the message that was meant, usually in half a second
   ([docs/proof/say-it-short/live.md](docs/proof/say-it-short/live.md)).
 - **Spoken audio:** synthesized speech through the simulator's microphone, the relay and both models: words were
-  back 0.8 s after a hold. It found two faults: "open the chat with Anna" asked which chat (fixed), and
-  speech-to-text's punctuation can turn a command into a reply to check, as in "Go home!" (open, proposed for
-  Earshot) ([docs/proof/voice/speech.md](docs/proof/voice/speech.md)).
+  back 0.8 s after a hold. It found that speech-to-text's punctuation ("Go home!") could turn a command into a
+  reply to check, and that "open the chat with Anna" asked which chat; both are fixed
+  ([docs/proof/voice/speech.md](docs/proof/voice/speech.md)).
 
 ### State
 
@@ -157,7 +157,7 @@ person or a message from Telegram.
 
 The hackathon asks for this. Everything in `src/` was written during the build week. Used as they were:
 
-- [Earshot](https://github.com/jarekbird/earshot) (MIT, by the same author), pinned at `v0.0.62`: screens, touch,
+- [Earshot](https://github.com/jarekbird/earshot) (MIT, by the same author), pinned at `v0.0.63`: screens, touch,
   hold-to-talk and the voice navigator.
 - The Even Hub SDK, simulator and CLI, and [mtcute](https://mtcute.dev) for Telegram's protocol.
 - The development framework (`CLAUDE.md`, `eslint/`, `scripts/`, `.claude/skills`, the test map): its structure and

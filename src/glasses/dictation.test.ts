@@ -146,6 +146,28 @@ describe('in a chat, what is said is the reply unless the navigator is sure of a
     expect(sent()).toEqual([])
   })
 
+  it('runs a command said by its very name, however speech-to-text wrote it, without asking the navigator (measured on speech: "Go home!" became a reply)', async () => {
+    const { say, open, router, asked } = await world(['Go home!'], {})
+    await open()
+    await say()
+    expect(asked).toEqual([])
+    expect(router.current.id).toBe('chats')
+  })
+
+  it('S5: takes "Send." on a reply for the command, and still sends only after a tap', async () => {
+    const { fake, say, open, asked, sent } = await world(['see you soon', 'Send.'], { pass: 1 })
+    await open()
+    await say()
+    await settle(6_000)
+    await say()
+    expect(asked).toHaveLength(1)
+    expect(fake.overlay()).toMatch(/Send\?\s+Tap to confirm/)
+    expect(sent()).toEqual([])
+    fake.tap()
+    await settle()
+    expect(sent()).toEqual([['anna', 'see you soon']])
+  })
+
   it('offers a short answer when its very words are said, without asking the navigator', async () => {
     const { fake, say, open, asked, sent } = await world(['Thanks!', 'reply on my way'], {})
     await open()

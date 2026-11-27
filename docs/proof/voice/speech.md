@@ -9,24 +9,31 @@ voice and not the glasses' microphone.
 ## What it found
 
 Speech-to-text writes a sentence, with a capital and a full stop or an exclamation mark. The navigator had been
-measured on bare words (`live.md`), and with the punctuation it is sometimes no longer sure of a command.
+measured on bare words (`live.md`), and with the punctuation it was sometimes no longer sure of a command.
 
-| Said | Heard as | What happened | State |
+| Said | Heard as | What happened | Now |
 | --- | --- | --- | --- |
-| Go home (in a chat) | Go home! | a reply to check: "Go home!" | open |
-| As I said it (on a written-out reply) | As I said it. | a reply to check: "As I said it." | open |
-| Open the chat with Anna | Open the chat with Anna. | asked which chat | fixed: opens the chat |
+| Go home (in a chat) | Go home! | a reply to check: "Go home!" | the list of chats |
+| As I said it (on a written-out reply) | As I said it. | a reply to check: "As I said it." | the reply as it was said |
+| Open the chat with Anna | Open the chat with Anna. | asked which chat | the chat (Anna) |
+| Message Sam … (in Anna's chat; Sam is not on the glasses) | Message Sam the demo moved to 4. | a reply to Anna to check | "That chat is not on your glasses" |
 
-- **Fixed here:** a chat is found after "the chat with", "my conversation with" and the like, on the phone
+- **A command said by its very name runs, whatever punctuation the words came with.** Every voice app needs that,
+  so it is in Earshot (rule G4), from its version 0.0.63 on, which this app now uses. `src/glasses/dictation.test.ts`
+  holds it for this app: "Go home!" goes home without the model being asked, and "Send." still asks for a tap.
+- **A chat is found after "the chat with"**, "my conversation with" and the like, on the phone
   (`src/names.test.ts`). "The" or "chat" alone is no longer taken for a chat that only starts with that word.
-- **Open:** a command said by its very name should run whatever punctuation the words came with. Every voice app
-  needs that, so it belongs in Earshot (rule G4) and is proposed there. Until then "Go home." was taken for the
-  command and "Go home!" for a reply. Nothing is sent either way: a reply waits for a tap, and a double tap
-  drops it.
+- **A chat that is the user's but not on the glasses is said to be so**, when it is named after "message", "text"
+  or "open", instead of the words becoming a reply to the chat that is open (`src/glasses/app.test.ts`). "Tell Sam
+  I said hi" in a chat is still a reply: that is what one writes to a person.
 
-## The run after the change
+Tried again with spoken audio on that code, both voices: "Go home!" went to the list, "As I said it." brought back
+the words as said, "Open the chat with Anna." opened the chat, and "Message Sam the demo moved to four" left both
+the list and Anna's chat as they were.
 
-22 holds in each voice. Words were back from speech-to-text 0.8 s after the hold ended, and the screen had
+## The first full run
+
+On the code before Earshot 0.0.63, with the chat-name fix in: 22 holds in each voice. Words were back from speech-to-text 0.8 s after the hold ended, and the screen had
 changed within 1.5 s, where they were timed.
 
 ### Voice 1 (US)
@@ -91,4 +98,3 @@ changed within 1.5 s, where they were timed.
   faults of its own. A person on real glasses is not measured here.
 - A misheard command in a chat becomes a reply to check, never a sent message: nothing in these runs was sent
   without a tap.
-- "Message Sam …" in an open chat, when Sam is not on the glasses, becomes a reply to the open chat.

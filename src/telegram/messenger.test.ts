@@ -54,6 +54,7 @@ function fakeClient() {
       sender,
       media: null,
       reactions: null,
+      forward: null,
     }
     messages.push(message)
     return message
