@@ -80,12 +80,17 @@ const VERBS = new Map<string, Command>([
   ['show', 'open'],
 ])
 
+const BEFORE_A_CHAT = new Set(['the', 'my', 'me', 'up', 'chat', 'conversation', 'with'])
+
 export function addressed<T extends Named>(words: string, named: readonly T[]): Found<T> {
   const said = tokensOf(words).map(token => token.text)
   const verbAt = said.findIndex(word => VERBS.has(word))
   const found = findNamed(words, named)
-  const nameAt = verbAt + (VERBS.get(said[verbAt]) === 'message' && said[verbAt + 1] === 'to' ? 2 : 1)
-  return verbAt >= 0 && found.at === nameAt ? found : { matches: [], rest: '', at: null }
+  const opening = VERBS.get(said[verbAt]) === 'open'
+  const from = verbAt + (!opening && said[verbAt + 1] === 'to' ? 2 : 1)
+  let last = from
+  while (opening && BEFORE_A_CHAT.has(said[last])) last++
+  return verbAt >= 0 && found.at !== null && found.at >= from && found.at <= last ? found : { matches: [], rest: '', at: null }
 }
 
 export function commandOf(words: string): Command | null {

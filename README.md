@@ -35,6 +35,9 @@ sends it. And no model ever reads your chats: AI works on what you say, never on
   unless it clearly is a command.
 - **"Say it short": 93 of 102** instructions came back as the message that was meant, usually in half a second
   ([docs/proof/say-it-short/live.md](docs/proof/say-it-short/live.md)).
+- **Spoken audio:** synthesized speech through the simulator's microphone, the relay and both models: words were
+  back 0.8 s after a hold. It found that speech-to-text's punctuation ("Go home!") made a command a reply; a command
+  said by its name now always runs ([docs/proof/voice/speech.md](docs/proof/voice/speech.md)).
 
 ### State
 

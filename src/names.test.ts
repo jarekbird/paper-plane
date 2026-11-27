@@ -106,6 +106,16 @@ describe('a command read on the phone by its first word', () => {
     expect(addressed('tell launch crew go home', chats)).toMatchObject({ matches: [chats[2]], rest: 'go home' })
   })
 
+  it('finds the chat in "open the chat with Anna", as people say it, and still not in a sentence about something else (measured on speech: it asked "Which chat?")', () => {
+    expect(addressed('Open the chat with Sam.', chats).matches).toEqual([chats[3]])
+    expect(addressed('open my conversation with launch crew', chats).matches).toEqual([chats[2]])
+    expect(addressed('show me Sam', chats).matches).toEqual([chats[3]])
+    expect(addressed('open up the chat with Sam', chats).matches).toEqual([chats[3]])
+    expect(addressed('open the door for Sam', chats).matches).toEqual([])
+    expect(addressed('show the plan to Sam', chats).matches).toEqual([])
+    expect(addressed('message the chat with Sam hello', chats).matches).toEqual([])
+  })
+
   it('does not take an ordinary word for a command word', () => {
     expect(addressed('constructor Sam', chats).matches).toEqual([])
   })

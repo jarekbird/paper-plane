@@ -845,6 +845,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       const offered = question.options.filter(option => option.role === undefined)
       const pass = question.options.find(passed => passed.role === 'pass')
       const replies = pass && chatOn.has(router.current)
+      const named = offered.filter(option => sameWords(option.say, question.words))
+      if (named.length === 1) return Promise.resolve({ [named[0].id]: 1 })
       if (replies && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
       if (command && !offered.some(option => sameWords(option.say, question.words))) {
         const meant = command === 'message' ? message : open
