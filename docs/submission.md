@@ -64,10 +64,10 @@ Google sign-in on its way to the phone, for five minutes at most.
 
 **To be honest about.** Say in the description what was run where, as the README does. As of 26 November: every
 screen and the voice flow run on a built-in sample account; the voice relay and both models were tried live; on
-real Telegram the app signed in, listed the chats, stayed signed in over a restart, sent a reply to Saved Messages
-and undid it, kept a reply as a draft, and signed out; on real Google, with a test account and the sample chats,
-it connected, read the next meeting, added a meeting with a reply, undid one, and disconnected; a run on real
-glasses is not proven yet. Google's sign-in is in testing mode: only listed test accounts can connect. Update this paragraph, and the README's "State", on the day of filing.
+real Telegram, in Saved Messages on the author's account, the app signed in, stayed signed in, sent, undid, kept a
+draft, liked, saved, took commands by voice and a spoken reply, and said so when Telegram could not be reached;
+on real Google, with a test account, it connected, read the next meeting, added a meeting with a reply, undid one,
+renewed its key after an hour and disconnected, also beside Telegram; a run on real glasses is not proven yet. Google's sign-in is in testing mode: only listed test accounts can connect. Update this paragraph, and the README's "State", on the day of filing.
 
 ## Video: up to 3 minutes
 
