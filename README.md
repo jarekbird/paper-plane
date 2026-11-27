@@ -47,10 +47,12 @@ This is a build in progress, during the hackathon week.
   reply sent, there within half a second of the tap, and undone; "Keep for later", which showed as the chat's
   draft in Telegram Web. The words of each hold were scripted. Folders, mentions, channels, reactions and the
   trouble paths have not been tried there yet.
-- **Google Calendar:** built and tried on the sample calendar. The relay has its Google client since 26 November
-  (in Google's testing mode: only listed test accounts can connect), and its start address leads to Google's
-  sign-in. No connect has been made yet, and it is not in the beta: a build offers it only when it is packed with
-  `VITE_GOOGLE_CALENDAR=on`.
+- **Tried on real Google (26 November), with a test Google account, from the app in the simulator on the sample
+  chats, through the deployed relay:** connecting by the code from the relay's page; the next meeting read from
+  Google onto the list; a reply with "Send and add", after which the meeting was in Google Calendar; a second one
+  undone ("Taken back"), which left Google's calendar as it was; disconnecting. The app is in Google's testing
+  mode, so only the test accounts listed in its Google Cloud project can connect. Not tried: opening Google's
+  sign-in from inside the Even app on a phone.
 - **Not proven yet:** a run on real glasses.
 - **Next:** the list in [docs/roadmap.md](docs/roadmap.md).
 
