@@ -11,7 +11,7 @@ Dubai), on DoraHacks, as `jarekbird`. The terms are in `docs/hackathon.md`.
 | README with setup, and what existed before 23 November | `README.md` | there; last pass before filing |
 | Demo video, up to 3 minutes; DoraHacks takes it as a link | filmed by Jarek from the script below, then uploaded (unlisted is enough) | to film |
 | Short description: the problem, who it is for, how it works, the track | below | draft |
-| Packed `.ehpk` (optional) | `npm run pack`; the beta on the Even Hub | 0.2.0 is on beta |
+| Packed `.ehpk` (optional) | `npm run pack`; the beta on the Even Hub | 0.3.0 is on beta |
 | Up to five feature requests for the APIs used (optional) | below | draft |
 
 ## Description
@@ -65,8 +65,9 @@ Google sign-in on its way to the phone, for five minutes at most.
 **To be honest about.** Say in the description what was run where, as the README does. As of 26 November: every
 screen and the voice flow run on a built-in sample account; the voice relay and both models were tried live; on
 real Telegram the app signed in, listed the chats, stayed signed in over a restart, sent a reply to Saved Messages
-and undid it, kept a reply as a draft, and signed out; the calendar runs on a sample calendar; anything against
-Google and a run on real glasses are not proven yet. Update this paragraph, and the README's "State", on the day of filing.
+and undid it, kept a reply as a draft, and signed out; on real Google, with a test account and the sample chats,
+it connected, read the next meeting, added a meeting with a reply, undid one, and disconnected; a run on real
+glasses is not proven yet. Google's sign-in is in testing mode: only listed test accounts can connect. Update this paragraph, and the README's "State", on the day of filing.
 
 ## Video: up to 3 minutes
 

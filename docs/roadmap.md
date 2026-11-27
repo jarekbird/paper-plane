@@ -28,14 +28,14 @@ bot or a server the user hosts. Paper Plane stands out by:
 | 7   | Quick replies: three short answers from fixed rules and the user's own phrases                              | built, on samples        |
 | 8   | Anything by voice, from any screen: open a chat, message someone, mark read, mute, go back                 | built; 48 of 50; no mute |
 | 9   | Undo: "Sent. Tap to undo" for five seconds                                                                 | built; undone on Telegram |
-| 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         | built, on samples; never run on Google |
+| 10  | Telegram + Calendar: next meeting on home; a time in a message offers "answer and add to calendar"         | built; run on Google, a test account |
 | 11  | Park it: "Keep for later" makes an unsent reply the chat's Telegram draft; "Save" copies to Saved Messages   | built; draft kept on Telegram; Save on samples |
 | 12  | Reactions: "like that"                                                                                     | built, on samples        |
 | 13  | Channel digest, each followed by Telegram's sponsored message (rule G6)                                    | built, on samples        |
 | 14  | Privacy screen: what leaves the phone, in plain words                                                      | built                    |
 | 15  | Trouble handled: no connection, Telegram asking to wait, signed out elsewhere                              | built, on samples; never run on Telegram |
 | 16  | Sample account for judges, no sign-in                                                                      | built                    |
-| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.2.0: Telegram, voice |
+| 17  | Submission: `.ehpk`, Even Hub beta, README, a 3-minute video on real glasses                               | beta 0.3.0: Telegram, voice, Calendar |
 
 Order: 1 to 9 first, then 10, 11, 12, 13. 14 to 17 run alongside.
 
