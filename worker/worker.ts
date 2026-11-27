@@ -16,6 +16,20 @@ export default {
   fetch: async (request: Request, env: Env): Promise<Response> => {
     const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, PAIRS } = env
     const signIn = await google(request, { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ...(PAIRS ? { PAIRS: pairsIn(PAIRS) } : {}) })
-    return signIn ?? relay(relayOptions({ key: env.OPENROUTER_KEY, upstream: env.UPSTREAM, models: undefined }))(request)
+    return (
+      signIn ??
+      relay(
+        relayOptions({
+          key: env.OPENROUTER_KEY,
+          upstream: env.UPSTREAM,
+          models: undefined,
+          liveUpstream: undefined,
+          liveKey: undefined,
+          liveModels: undefined,
+          secret: undefined,
+          calls: undefined,
+        }),
+      )(request)
+    )
   },
 }

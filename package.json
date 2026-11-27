@@ -22,7 +22,7 @@
     "@fuman/net": "0.0.23",
     "@mtcute/core": "0.32.8",
     "@mtcute/web": "0.32.8",
-    "earshot": "github:jarekbird/earshot#v0.0.35"
+    "earshot": "github:jarekbird/earshot#v0.0.62"
   },
   "devDependencies": {
     "@evenrealities/evenhub-cli": "0.2.0",

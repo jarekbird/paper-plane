@@ -164,6 +164,7 @@ describe('in a chat, what is said is the reply unless the navigator is sure of a
   it('tells the navigator, in a chat, that the other choice is a message to a person', async () => {
     const { say, open, asked } = await world(['what is new', 'what is new'], {})
     await say()
+    await settle(3_500)
     await open()
     await say()
     const passOf = (question: Question) => question.options.find(option => option.role === 'pass')?.say

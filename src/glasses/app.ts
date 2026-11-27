@@ -19,6 +19,7 @@ import {
   type Box,
   type Lifetime,
   type NavigatorModel,
+  type Question,
   type Screen,
   type Timer,
   type VoiceOptions,
@@ -162,6 +163,17 @@ function scroller(lines: () => readonly string[], redraw: () => void, rows = ROW
         .join('\n'),
     down: action({ id: 'down', say: 'Scroll down', blocked: () => (at() < last() ? null : WORDS.end), run: move(2) }),
     up: action({ id: 'up', say: 'Scroll up', blocked: () => (at() > 0 ? null : WORDS.start), run: move(-2) }),
+  }
+}
+
+function untargeted(question: Question): Question {
+  return {
+    ...question,
+    options: question.options.map(option => {
+      const offered = { ...option }
+      delete offered.target
+      return offered
+    }),
   }
 }
 
@@ -852,13 +864,13 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
         const option = replying ? pass : offered.find(one => one.say === meant.say)
         if (option) return Promise.resolve({ [option.id]: 1 })
       }
-      if (!replies) return asked.choose(question, turn)
+      if (!replies) return asked.choose(untargeted(question), turn)
       const answer = (text: string) => sameWords(`${REPLY}: ${question.words.replace(REPLY_LEAD, '')}`, text)
       const answered = offered.find(option => answer(option.say))
       if (answered) return Promise.resolve({ [answered.id]: 1 })
       const commands = offered.filter(option => !option.say.startsWith(`${REPLY}: `))
       const told = { ...question, options: question.options.map(option => (option === pass ? { ...option, say: A_MESSAGE } : option)) }
-      return unlessSure(asked.choose(told, turn), commands, pass)
+      return unlessSure(asked.choose(untargeted(told), turn), commands, pass)
     },
   }
 
