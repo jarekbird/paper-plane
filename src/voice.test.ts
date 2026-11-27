@@ -49,6 +49,7 @@ describe('what leaves the phone when the user holds and speaks', () => {
   it('S1, G5: is the sound and the words heard; no chat, person or message of the account, on the list or in a chat', async () => {
     const { fake, sent, say } = await world('what is new')
     await say()
+    await settle(3_500)
     fake.tap()
     await settle()
     expect(fake.lines().join(' ')).toContain('12:30')

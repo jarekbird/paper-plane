@@ -143,7 +143,7 @@ person or a message from Telegram.
 
 The hackathon asks for this. Everything in `src/` was written during the build week. Used as they were:
 
-- [Earshot](https://github.com/jarekbird/earshot) (MIT, by the same author), pinned at `v0.0.35`: screens, touch,
+- [Earshot](https://github.com/jarekbird/earshot) (MIT, by the same author), pinned at `v0.0.62`: screens, touch,
   hold-to-talk and the voice navigator.
 - The Even Hub SDK, simulator and CLI, and [mtcute](https://mtcute.dev) for Telegram's protocol.
 - The development framework (`CLAUDE.md`, `eslint/`, `scripts/`, `.claude/skills`, the test map): its structure and

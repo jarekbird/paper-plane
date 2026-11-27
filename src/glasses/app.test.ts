@@ -510,6 +510,7 @@ describe('by voice, from any screen', () => {
     await settle(2_500)
     expect(fake.lines()).toEqual(['Which chat?', '> Anna (2)', 'Sam'])
     fake.down()
+    await settle()
     fake.tap()
     await settle()
     expect(router.current.id).toBe('chat:sam')
