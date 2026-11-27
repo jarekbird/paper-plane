@@ -517,6 +517,55 @@ describe('by voice, from any screen', () => {
     expect(router.depth).toBe(2)
   })
 
+  it('says that a chat is not on the glasses when it is named and is the user’s but was not picked, on the list and in a chat', async () => {
+    const { fake, say, sent, router, openFirst } = await world(['anna'], ['message Sam the demo moved', 'open Sam', 'message Sam hello'])
+    await say()
+    expect(fake.overlay()).toContain('That chat is not on your glasses')
+    expect(router.current.id).toBe('chats')
+    await settle(3_500)
+    await say()
+    expect(fake.overlay()).toContain('That chat is not on your glasses')
+    expect(router.current.id).toBe('chats')
+    await settle(3_500)
+    await openFirst()
+    await say()
+    expect(fake.overlay()).toContain('That chat is not on your glasses')
+    expect(router.current.id).toBe('chat:anna')
+    expect(sent()).toEqual([])
+  })
+
+  it('still takes "tell Sam I said hi" in a chat for the reply, when Sam is not on the glasses: that is what one writes to a person', async () => {
+    const { fake, say, router, openFirst } = await world(['anna'], ['tell Sam I said hi'])
+    await openFirst()
+    await say()
+    await settle(2_500)
+    expect(router.current.id).not.toBe('chat:anna')
+    expect(fake.lines().slice(0, 2)).toEqual(['To Anna', 'tell Sam I said hi'])
+  })
+
+  it('asks which chat, as before, when the name is no chat of the user’s at all', async () => {
+    const { fake, say, router } = await world(['anna', 'sam'], ['message Robert hello'])
+    await say()
+    await settle(2_500)
+    expect(router.current.id).toBe('pick-chat')
+    expect(fake.lines()[0]).toBe('Which chat?')
+  })
+
+  it('offers "Tap to reply" only once the chat’s messages are there', async () => {
+    const { fake, messenger, openFirst } = await world(['anna'])
+    const history = messenger.history
+    let arrive = () => {}
+    messenger.history = async (chat, limit) => {
+      await new Promise<void>(resolve => (arrive = resolve))
+      return history(chat, limit)
+    }
+    await openFirst()
+    expect(fake.lines()).toEqual(['Anna', 'Loading…'])
+    arrive()
+    await settle()
+    expect(fake.lines().at(-1)).toBe('Tap to reply')
+  })
+
   it('S5: starts a message to a chat said by name with the words after the name, and sends it only by a tap', async () => {
     const { fake, say, sent, router } = await world(['anna', 'sam'], ['message Sam the demo moved to four'])
     await say()
@@ -538,9 +587,14 @@ describe('by voice, from any screen', () => {
   })
 
   it('never writes to a chat that was not picked, also when it is named', async () => {
-    const { fake, say, sent } = await world(['anna'], ['message Sam the demo moved to four'])
+    const { fake, say, sent, router } = await world(['anna'], ['message Sam the demo moved to four'])
     await say()
-    expect(fake.lines()[0]).toBe('Which chat?')
+    expect(fake.overlay()).toContain('That chat is not on your glasses')
+    expect(router.current.id).toBe('chats')
+    fake.tap()
+    await settle()
+    fake.tap()
+    await settle()
     expect(sent()).toEqual([])
   })
 

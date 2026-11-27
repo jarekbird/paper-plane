@@ -71,6 +71,7 @@ const MINUTE_MS = 60_000
 const SURE = 0.6
 const REPLY = 'Reply'
 const REPLY_LEAD = /^\s*(?:reply|answer|say)\s+/i
+const NAMES_A_CHAT = /^\W*(?:message|text|open)\b/i
 // Tried on typesafe/jev-1.14 on 2026-11-25 (docs/proof/voice/live.md): with this wording the navigator took a dictated reply for a command far less often.
 const A_MESSAGE =
   'A message to send to the person in the chat on screen. Choose this when the words are something one would write to a person, or are more than one short command'
@@ -83,6 +84,7 @@ const WORDS = {
   tapToRetry: 'Tap to try again',
   whichChat: 'Which chat?',
   noSuchChat: 'No chat by that name',
+  notOnGlasses: 'That chat is not on your glasses',
   nothingUnread: 'Nothing is unread',
   listedChats: 'the chats on the list',
   notRead: 'Could not mark them read',
@@ -716,9 +718,12 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
             })
           : channel
             ? boxes(page(titleOf(id), scroll.shown(), WORDS.readOnly), { on: { down: scroll.down, up: scroll.up } })
-            : boxes(page(titleOf(id), scroll.shown(), undo ? (undo.added ? WORDS.undoBoth : WORDS.undo) : WORDS.tapToReply), {
-                on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
-              }),
+            : boxes(
+                page(titleOf(id), scroll.shown(), undo ? (undo.added ? WORDS.undoBoth : WORDS.undo) : messages ? WORDS.tapToReply : ''),
+                {
+                  on: { tap: undo ? takeBack : reply, down: scroll.down, up: scroll.up },
+                },
+              ),
     }
     if (!channel) chatOn.set(self, { chat: id, covers: false })
     return self
@@ -726,10 +731,22 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
 
   const chatTargets = (chats: readonly Chat[]) => chats.map(chat => ({ id: chat.id, say: label(chat), value: chat, private: true }))
 
+  const elsewhere = (words: string) => {
+    const picked = new Set(inbox.picked().map(chat => chat.id))
+    return (
+      addressed(
+        words,
+        inbox.all().filter(chat => !picked.has(chat.id)),
+      ).matches.length > 0
+    )
+  }
+
   const named = () => {
     const heard = said
     said = null
-    return heard ? addressed(heard.words, inbox.picked()) : { matches: [], rest: '', at: null }
+    if (!heard) return { matches: [], rest: '', elsewhere: false }
+    const found = addressed(heard.words, inbox.picked())
+    return { matches: found.matches, rest: found.rest, elsewhere: found.matches.length === 0 && elsewhere(heard.words) }
   }
 
   const pick = (among: readonly Chat[]) => {
@@ -756,8 +773,9 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     hint: 'Shows the newest messages of one chat, which the user may name',
     targets: () => chatTargets(inbox.picked()),
     choose: () => {
-      const { matches } = named()
-      if (matches.length === 1) router.jump(chatScreen(matches[0].id))
+      const { matches, elsewhere } = named()
+      if (elsewhere) shell.notice(WORDS.notOnGlasses)
+      else if (matches.length === 1) router.jump(chatScreen(matches[0].id))
       else pick(matches)
     },
     run: chat => router.open(chatScreen(chat.id)),
@@ -769,8 +787,9 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
     hint: 'Starts a message to a chat the user names, with the words that follow the name',
     targets: () => chatTargets(inbox.picked()),
     choose: () => {
-      const { matches, rest } = named()
-      if (matches.length !== 1) pick(matches)
+      const { matches, rest, elsewhere } = named()
+      if (elsewhere) shell.notice(WORDS.notOnGlasses)
+      else if (matches.length !== 1) pick(matches)
       else if (showable(rest) && matches[0].kind !== 'channel')
         router.jump(chatScreen(matches[0].id), draftScreen(matches[0].id, rest, true))
       else router.jump(chatScreen(matches[0].id))
@@ -860,7 +879,8 @@ export function startGlasses(life: Lifetime, shown: Display, parts: GlassesParts
       if (replies && instructed(question.words)) return Promise.resolve({ [pass.id]: 1 })
       if (command && !offered.some(option => sameWords(option.say, question.words))) {
         const meant = command === 'message' ? message : open
-        const replying = replies && addressed(question.words, inbox.picked()).matches.length === 0
+        const nobody = addressed(question.words, inbox.picked()).matches.length === 0
+        const replying = replies && nobody && !(NAMES_A_CHAT.test(question.words) && elsewhere(question.words))
         const option = replying ? pass : offered.find(one => one.say === meant.say)
         if (option) return Promise.resolve({ [option.id]: 1 })
       }

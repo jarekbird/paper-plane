@@ -5,6 +5,7 @@ export interface PeerLike {
   id: number
   displayName: string
   chatType?: string
+  isSelf?: boolean
 }
 
 export interface MessageLike {
@@ -16,6 +17,7 @@ export interface MessageLike {
   chat: PeerLike
   sender: { displayName: string }
   media: { type: string } | null
+  forward: object | null
   reactions: { reactions: readonly { emoji: unknown; order: number | null }[] } | null
 }
 
@@ -29,6 +31,7 @@ export interface DialogLike {
 }
 
 export const LIKE = '👍'
+export const SAVED_MESSAGES = 'Saved Messages'
 
 const MEDIA: Record<string, string> = {
   photo: 'Photo',
@@ -64,7 +67,7 @@ export function toMessage(message: MessageLike): Message {
     from: message.sender.displayName,
     text: [media, message.text].filter(Boolean).join(' '),
     at: message.date.getTime(),
-    mine: message.isOutgoing,
+    mine: message.isOutgoing || (message.chat.isSelf === true && message.forward === null),
     liked: message.reactions?.reactions.some(reaction => reaction.emoji === LIKE && reaction.order !== null) ?? false,
   }
 }
@@ -93,7 +96,7 @@ export function toChat<D extends DialogLike>(dialog: D, folders: readonly Folder
   const within: Folder[] = folders.filter(folder => folder.has(dialog)).map(folder => ({ id: String(folder.id), title: folder.title }))
   return {
     id: chatId(dialog.peer),
-    title: dialog.peer.displayName,
+    title: dialog.peer.isSelf ? SAVED_MESSAGES : dialog.peer.displayName,
     kind: kindOf(dialog.peer),
     folders: within,
     unread: dialog.unreadCount,
